@@ -2,14 +2,15 @@
 
 import { motion } from "framer-motion";
 import { type Note } from "../lib/validations";
-import { Trash2 } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
 
 interface NoteCardProps {
   note: Note;
   onDelete: (id: string) => void;
+  onEdit?: (note: Note) => void;
 }
 
-export function NoteCard({ note, onDelete }: NoteCardProps) {
+export function NoteCard({ note, onDelete, onEdit }: NoteCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -23,13 +24,24 @@ export function NoteCard({ note, onDelete }: NoteCardProps) {
         <h3 className="font-bold text-lg leading-tight truncate font-sans">
           {note.title}
         </h3>
-        <button
-          onClick={() => onDelete(note.id)}
-          className="text-foreground/40 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 p-1"
-          aria-label="Delete note"
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onEdit && (
+            <button
+              onClick={() => onEdit(note)}
+              className="text-foreground/40 hover:text-primary transition-colors p-1"
+              aria-label="Edit note"
+            >
+              <Pencil size={16} />
+            </button>
+          )}
+          <button
+            onClick={() => onDelete(note.id)}
+            className="text-foreground/40 hover:text-red-500 transition-colors p-1"
+            aria-label="Delete note"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
       <p className="text-foreground/70 text-sm flex-1 whitespace-pre-wrap break-words line-clamp-6">
         {note.content}

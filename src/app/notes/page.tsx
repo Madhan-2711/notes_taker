@@ -3,9 +3,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { db, hasValidConfig } from "../../lib/firebaseConfig";
-import { collection, query, where, onSnapshot, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { type Note } from "../../lib/validations";
 import { NoteCard } from "../../components/NoteCard";
+import { EditNoteModal } from "../../components/EditNoteModal";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Calendar, X } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +15,7 @@ export default function NotesPage() {
   const { user, loading } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [dateFilter, setDateFilter] = useState("");
+  const [editingNote, setEditingNote] = useState<Note | null>(null);
 
   useEffect(() => {
     if (!user || !hasValidConfig) {
@@ -47,6 +49,15 @@ export default function NotesPage() {
     } catch (error) {
       console.error("Delete failed", error);
     }
+  };
+
+  const handleUpdateNote = async (id: string, title: string, content: string) => {
+    if (!user || !hasValidConfig) return;
+    await updateDoc(doc(db, "notes", id), {
+      title,
+      content,
+      updatedAt: Date.now(),
+    });
   };
 
   // Group and filter notes by date
@@ -100,6 +111,7 @@ export default function NotesPage() {
   }
 
   return (
+    <>
     <div className="flex-1 max-w-5xl mx-auto w-full p-6 mt-4">
       {/* Header */}
       <motion.div
@@ -162,7 +174,7 @@ export default function NotesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <AnimatePresence>
                   {dateNotes.map((note) => (
-                    <NoteCard key={note.id} note={note} onDelete={handleDeleteNote} />
+                    <NoteCard key={note.id} note={note} onDelete={handleDeleteNote} onEdit={setEditingNote} />
                   ))}
                 </AnimatePresence>
               </div>
@@ -186,5 +198,13 @@ export default function NotesPage() {
         </motion.div>
       )}
     </div>
+
+      {/* Edit Modal */}
+      <EditNoteModal
+        note={editingNote}
+        onClose={() => setEditingNote(null)}
+        onSave={handleUpdateNote}
+      />
+    </>
   );
 }
