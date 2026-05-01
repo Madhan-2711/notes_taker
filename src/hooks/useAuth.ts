@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from "firebase/auth";
 import { auth, hasValidConfig } from "../lib/firebaseConfig";
 
-const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+const INACTIVITY_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
