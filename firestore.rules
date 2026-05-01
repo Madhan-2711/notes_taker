@@ -1,15 +1,32 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     match /notes/{noteId} {
-      // Zero-Trust Approach: Only the author can read their note
+      // Only the author can read their note
       allow read: if request.auth != null && request.auth.uid == resource.data.authorId;
       // Only authenticated users can create, and they must be creating it for themselves
       allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
       // Only the author can update their note, and they can't change the authorId
-      allow update: if request.auth != null && request.auth.uid == resource.data.authorId && request.resource.data.authorId == resource.data.authorId;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.authorId
+        && request.resource.data.authorId == resource.data.authorId;
       // Only the author can delete their note
       allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
     }
+
+    match /groups/{groupId} {
+      // Only the author can read their groups
+      allow read: if request.auth != null && request.auth.uid == resource.data.authorId;
+      // Only authenticated users can create groups for themselves
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+      // Only the author can update their group, and they can't change the authorId
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.authorId
+        && request.resource.data.authorId == resource.data.authorId;
+      // Only the author can delete their group
+      allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+    }
+
   }
 }

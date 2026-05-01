@@ -1,26 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { db, hasValidConfig } from "../../lib/firebaseConfig";
-import { collection, addDoc } from "firebase/firestore";
-import { noteSchema } from "../../lib/validations";
+import { collection, addDoc, query, where, onSnapshot } from "firebase/firestore";
+import { noteSchema, type Group } from "../../lib/validations";
+import { addNotesToGroup } from "../../lib/groupsService";
 import { motion } from "framer-motion";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, FolderOpen } from "lucide-react";
 import Link from "next/link";
 
 export default function WritePage() {
   const { user, loading } = useAuth();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Live-subscribe to user's groups for the multi-select
+  useEffect(() => {
+    if (!user || !hasValidConfig) return;
+    const q = query(
+      collection(db, "groups"),
+      where("authorId", "==", user.uid)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Group[];
+      data.sort((a, b) => a.title.localeCompare(b.title));
+      setGroups(data);
+    });
+    return () => unsub();
+  }, [user]);
+
+  const handleToggleGroup = (groupId: string) => {
+    setSelectedGroupIds((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
 
   const handleCreateNote = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(false);
-
     if (!user || !hasValidConfig) return;
 
     try {
@@ -29,14 +52,24 @@ export default function WritePage() {
       const newNote = {
         title: validData.title,
         content: validData.content,
+        groupIds: selectedGroupIds,
         authorId: user.uid,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
 
-      await addDoc(collection(db, "notes"), newNote);
+      const ref = await addDoc(collection(db, "notes"), newNote);
+
+      // Link the note to each selected group
+      if (selectedGroupIds.length > 0) {
+        await Promise.all(
+          selectedGroupIds.map((gid) => addNotesToGroup(gid, [ref.id]))
+        );
+      }
+
       setTitle("");
       setContent("");
+      setSelectedGroupIds([]);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
@@ -113,11 +146,43 @@ export default function WritePage() {
           />
         </div>
 
+        {/* Group assignment */}
+        {groups.length > 0 && (
+          <div>
+            <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-3 flex items-center gap-1.5">
+              <FolderOpen size={11} />
+              Add to Groups <span className="normal-case text-foreground/25">(optional)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {groups.map((g) => {
+                const isSelected = selectedGroupIds.includes(g.id);
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => handleToggleGroup(g.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all duration-150 ${
+                      isSelected
+                        ? "text-white border-transparent shadow-sm"
+                        : "bg-transparent border-border/50 text-foreground/50 hover:border-primary/40"
+                    }`}
+                    style={isSelected ? { backgroundColor: g.color, borderColor: g.color } : {}}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: isSelected ? "white" : g.color }}
+                    />
+                    {g.title}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mt-2 pt-4 border-t border-border/30">
           <div className="flex-1">
-            {error && (
-              <span className="text-sm text-red-500 font-medium">{error}</span>
-            )}
+            {error && <span className="text-sm text-red-500 font-medium">{error}</span>}
             {success && (
               <motion.span
                 initial={{ opacity: 0, x: -10 }}

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthButton } from "../components/AuthButton";
 import { Logo } from "../components/Logo";
+import { NavBar } from "../components/NavBar";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
@@ -25,6 +26,7 @@ export default function RootLayout({
             <AuthButton />
           </div>
         </header>
+        <NavBar />
         <main className="flex-1 flex flex-col">
           {children}
         </main>
