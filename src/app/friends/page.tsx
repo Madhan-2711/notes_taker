@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { useUserKeys } from "../../hooks/useUserKeys";
 import { hasValidConfig } from "../../lib/firebaseConfig";
-import { type FriendRequest, type UserProfile } from "../../lib/validations";
+import { type FriendRequest, type UserProfile, type CollabInvite } from "../../lib/validations";
 import {
   sendFriendRequest,
   subscribeToPendingRequests,
@@ -13,14 +14,30 @@ import {
   getFriends,
   removeFriend,
 } from "../../lib/services/social/friendsService";
+import {
+  subscribeToInvites,
+  acceptInvite,
+  rejectInvite,
+} from "../../lib/services/social/collaborationService";
 import { FriendRequestCard } from "../../components/FriendRequestCard";
 import { FriendCard } from "../../components/FriendCard";
+import { CollabInviteCard } from "../../components/CollabInviteCard";
+import { VaultUnlockModal } from "../../components/VaultUnlockModal";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Search, Send, UserPlus, Users, Inbox } from "lucide-react";
+import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function FriendsPage() {
   const { user, loading } = useAuth();
+  const router = useRouter();
+  const {
+    privateKey,
+    needsVaultPassword,
+    unlockVault,
+    error: keyError,
+  } = useUserKeys();
+
   const [searchEmail, setSearchEmail] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchSuccess, setSearchSuccess] = useState(false);
@@ -28,11 +45,19 @@ export default function FriendsPage() {
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[]>([]);
+  const [collabInvites, setCollabInvites] = useState<CollabInvite[]>([]);
 
-  // Subscribe to incoming pending requests
+  // Subscribe to incoming pending friend requests
   useEffect(() => {
     if (!user || !hasValidConfig) return;
     const unsub = subscribeToPendingRequests(user.uid, setIncomingRequests);
+    return () => unsub();
+  }, [user]);
+
+  // Subscribe to incoming collab invites
+  useEffect(() => {
+    if (!user || !hasValidConfig) return;
+    const unsub = subscribeToInvites(user.uid, setCollabInvites);
     return () => unsub();
   }, [user]);
 
@@ -96,6 +121,28 @@ export default function FriendsPage() {
   const handleRemoveFriend = async (friendDocId: string) => {
     await removeFriend(friendDocId);
     setFriends((prev) => prev.filter((f) => f.friendDocId !== friendDocId));
+  };
+
+  const handleAcceptInvite = async (inviteId: string) => {
+    if (!user || !privateKey) return;
+    try {
+      await acceptInvite(inviteId, user.uid, privateKey);
+      // Find the invite to get noteId for navigation
+      const invite = collabInvites.find((i) => i.id === inviteId);
+      if (invite) {
+        router.push(`/collab/${invite.noteId}`);
+      }
+    } catch (err) {
+      console.error("Accept invite error:", err);
+    }
+  };
+
+  const handleRejectInvite = async (inviteId: string) => {
+    try {
+      await rejectInvite(inviteId);
+    } catch (err) {
+      console.error("Reject invite error:", err);
+    }
   };
 
   if (loading) {
@@ -179,6 +226,42 @@ export default function FriendsPage() {
           </motion.p>
         )}
       </motion.div>
+
+      {/* Collab Invites */}
+      {collabInvites.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.07 }}
+          className="mb-10"
+        >
+          <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-4 flex items-center gap-3">
+            <Lock size={13} />
+            <span>Collaboration Invites</span>
+            <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              {collabInvites.length}
+            </span>
+            <span className="flex-1 h-px bg-border/50"></span>
+          </h3>
+          {!privateKey && (
+            <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-xl mb-3">
+              ⚠️ Unlock your vault password to accept encrypted invites.
+            </div>
+          )}
+          <div className="space-y-3">
+            <AnimatePresence>
+              {collabInvites.map((invite) => (
+                <CollabInviteCard
+                  key={invite.id}
+                  invite={invite}
+                  onAccept={handleAcceptInvite}
+                  onReject={handleRejectInvite}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        </motion.section>
+      )}
 
       {/* Incoming Requests */}
       {incomingRequests.length > 0 && (
@@ -272,6 +355,13 @@ export default function FriendsPage() {
           </div>
         )}
       </motion.section>
+
+      {/* Vault Unlock Modal */}
+      <VaultUnlockModal
+        isOpen={needsVaultPassword}
+        onUnlock={unlockVault}
+        error={keyError}
+      />
     </div>
   );
 }
