@@ -7,7 +7,12 @@ service cloud.firestore {
     match /notes/{noteId} {
       allow read: if request.auth != null
         && (request.auth.uid == resource.data.authorId
-            || request.auth.uid in resource.data.collaboratorIds);
+            || request.auth.uid in resource.data.collaboratorIds
+            || (
+                 exists(/databases/$(database)/documents/collab_invites/$(noteId + "_" + request.auth.uid))
+                 && get(/databases/$(database)/documents/collab_invites/$(noteId + "_" + request.auth.uid)).data.receiverId == request.auth.uid
+               )
+           );
 
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.authorId;
@@ -107,9 +112,10 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.senderId;
 
-      // Only receiver can accept/reject
+      // Receiver can accept/reject; sender can re-invite (overwrite rejected)
       allow update: if request.auth != null
-        && request.auth.uid == resource.data.receiverId;
+        && (request.auth.uid == resource.data.receiverId
+            || request.auth.uid == resource.data.senderId);
 
       allow delete: if request.auth != null
         && (request.auth.uid == resource.data.senderId

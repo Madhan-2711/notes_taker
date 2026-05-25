@@ -13,6 +13,7 @@ import {
   getDocs,
   getDoc,
   onSnapshot,
+  arrayUnion,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
@@ -69,6 +70,13 @@ export async function getIncomingInvites(
 /**
  * Accept a collab invite.
  * Decrypts the note key and adds the user to the note's collaborators.
+ *
+ * IMPORTANT: We must NOT read the note document before updating it —
+ * Firestore rules block reads until the user is a collaborator.
+ * Instead, we use arrayUnion() and dot-notation to append atomically.
+ *
+ * Order matters: update the note FIRST (while invite is still "pending",
+ * which the security rule checks), THEN mark the invite as "accepted".
  */
 export async function acceptInvite(
   inviteId: string,
@@ -82,28 +90,24 @@ export async function acceptInvite(
 
   const invite = inviteSnap.data() as Omit<CollabInvite, "id">;
 
-  // Decrypt the note key
+  // Decrypt the note key using the receiver's private key
   const noteKey = await decryptKeyFromUser(invite.encryptedNoteKey, privateKey);
 
   // Re-encrypt the key with the user's own public key for direct access
   const userPublicKey = await getUserPublicKey(userId);
   const reEncryptedKey = await encryptKeyForUser(noteKey, userPublicKey);
 
-  // Update the note's collaboratorIds and encryptedKeys
+  // Step 1: Update the note — NO prior read needed.
+  // arrayUnion atomically appends without reading.
+  // Dot-notation sets a nested field without overwriting siblings.
   const noteRef = doc(db, "notes", invite.noteId);
-  const noteSnap = await getDoc(noteRef);
-  if (!noteSnap.exists()) throw new Error("Note not found");
-
-  const noteData = noteSnap.data();
-  const collaboratorIds = noteData.collaboratorIds || [];
-  const encryptedKeys = noteData.encryptedKeys || {};
-
   await updateDoc(noteRef, {
-    collaboratorIds: [...collaboratorIds, userId],
-    encryptedKeys: { ...encryptedKeys, [userId]: reEncryptedKey },
+    collaboratorIds: arrayUnion(userId),
+    [`encryptedKeys.${userId}`]: reEncryptedKey,
   });
 
-  // Update invite status
+  // Step 2: Mark invite as accepted (MUST be after note update,
+  // because the note update rule checks that the invite is still "pending")
   await updateDoc(inviteRef, { status: "accepted" });
 }
 
