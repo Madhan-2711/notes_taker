@@ -18,7 +18,6 @@ import {
   doc,
   query,
   where,
-  orderBy,
   onSnapshot,
   writeBatch,
   type Unsubscribe,
@@ -40,7 +39,7 @@ interface UseCollabEditorReturn {
 }
 
 const COMPACTION_THRESHOLD = 50;
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 300;
 
 export function useCollabEditor(
   noteId: string,
@@ -129,44 +128,53 @@ export function useCollabEditor(
           }, DEBOUNCE_MS);
         });
 
-        // Subscribe to remote updates
+        // Subscribe to remote updates.
+        // NOTE: No orderBy — Yjs CRDT handles out-of-order updates natively,
+        // and using orderBy would require a Firestore composite index.
         const updatesQuery = query(
           collection(db, "note_updates"),
-          where("noteId", "==", noteId),
-          orderBy("createdAt", "asc")
+          where("noteId", "==", noteId)
         );
 
-        unsubUpdates = onSnapshot(updatesQuery, async (snap) => {
-          for (const change of snap.docChanges()) {
-            if (change.type !== "added") continue;
+        unsubUpdates = onSnapshot(
+          updatesQuery,
+          async (snap) => {
+            for (const change of snap.docChanges()) {
+              if (change.type !== "added") continue;
 
-            const updateData = change.doc.data();
+              const updateData = change.doc.data();
 
-            // Skip own updates and already-processed updates
-            if (updateData.senderId === userId) continue;
-            if (processedUpdateIdsRef.current.has(change.doc.id)) continue;
+              // Skip own updates and already-processed updates
+              if (updateData.senderId === userId) continue;
+              if (processedUpdateIdsRef.current.has(change.doc.id)) continue;
 
-            processedUpdateIdsRef.current.add(change.doc.id);
+              processedUpdateIdsRef.current.add(change.doc.id);
 
-            try {
-              const decryptedBase64 = await decryptData(
-                updateData.encryptedUpdate,
-                updateData.iv,
-                noteKey
-              );
-              const updateBytes = new Uint8Array(base64ToArrayBuffer(decryptedBase64));
+              try {
+                const decryptedBase64 = await decryptData(
+                  updateData.encryptedUpdate,
+                  updateData.iv,
+                  noteKey
+                );
+                const updateBytes = new Uint8Array(base64ToArrayBuffer(decryptedBase64));
 
-              isApplyingRemoteRef.current = true;
-              Y.applyUpdate(ydoc, updateBytes, "remote");
-              isApplyingRemoteRef.current = false;
+                isApplyingRemoteRef.current = true;
+                Y.applyUpdate(ydoc, updateBytes, "remote");
+                isApplyingRemoteRef.current = false;
 
-              setIsSynced(true);
-            } catch (err) {
-              console.error("Failed to apply remote update:", err);
-              isApplyingRemoteRef.current = false;
+                setIsSynced(true);
+              } catch (err) {
+                console.error("Failed to apply remote update:", err);
+                isApplyingRemoteRef.current = false;
+              }
             }
+          },
+          (err) => {
+            console.error("note_updates subscription error:", err);
+            setError("Real-time sync failed. Check console for details.");
+            setIsSynced(false);
           }
-        });
+        );
 
         setIsLoading(false);
         setIsSynced(true);
