@@ -7,6 +7,7 @@ import {
   addDoc,
   updateDoc,
   doc,
+  setDoc,
   query,
   where,
   getDocs,
@@ -37,7 +38,8 @@ export async function sendCollabInvite(
   const recipientPublicKey = await getUserPublicKey(receiverId);
   const encryptedNoteKey = await encryptKeyForUser(noteKey, recipientPublicKey);
 
-  await addDoc(collection(db, "collab_invites"), {
+  const inviteId = `${noteId}_${receiverId}`;
+  await setDoc(doc(db, "collab_invites", inviteId), {
     noteId,
     senderId,
     senderName,
