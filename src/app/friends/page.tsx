@@ -23,6 +23,7 @@ import { FriendRequestCard } from "../../components/FriendRequestCard";
 import { FriendCard } from "../../components/FriendCard";
 import { CollabInviteCard } from "../../components/CollabInviteCard";
 import { VaultUnlockModal } from "../../components/VaultUnlockModal";
+import { KeySetupModal } from "../../components/KeySetupModal";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock } from "lucide-react";
 import Link from "next/link";
@@ -34,6 +35,8 @@ export default function FriendsPage() {
   const {
     privateKey,
     needsVaultPassword,
+    needsVaultSetup,
+    setVaultPassword,
     unlockVault,
     error: keyError,
   } = useUserKeys();
@@ -46,6 +49,14 @@ export default function FriendsPage() {
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[]>([]);
   const [collabInvites, setCollabInvites] = useState<CollabInvite[]>([]);
+  const [showKeySetup, setShowKeySetup] = useState(false);
+
+  // Show key setup modal when prompted
+  useEffect(() => {
+    if (needsVaultSetup) {
+      setShowKeySetup(true);
+    }
+  }, [needsVaultSetup]);
 
   // Subscribe to incoming pending friend requests
   useEffect(() => {
@@ -244,8 +255,20 @@ export default function FriendsPage() {
             <span className="flex-1 h-px bg-border/50"></span>
           </h3>
           {!privateKey && (
-            <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-xl mb-3">
-              ⚠️ Unlock your vault password to accept encrypted invites.
+            <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <span>
+                {needsVaultSetup
+                  ? "⚠️ You need to set up a vault password before you can accept encrypted note invites."
+                  : "⚠️ Unlock your vault password to accept encrypted invites."}
+              </span>
+              {needsVaultSetup && (
+                <button
+                  onClick={() => setShowKeySetup(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition-colors shrink-0"
+                >
+                  Set Password
+                </button>
+              )}
             </div>
           )}
           <div className="space-y-3">
@@ -361,6 +384,13 @@ export default function FriendsPage() {
         isOpen={needsVaultPassword}
         onUnlock={unlockVault}
         error={keyError}
+      />
+
+      {/* Key Setup Modal */}
+      <KeySetupModal
+        isOpen={showKeySetup}
+        onClose={() => setShowKeySetup(false)}
+        onSetPassword={setVaultPassword}
       />
     </div>
   );
