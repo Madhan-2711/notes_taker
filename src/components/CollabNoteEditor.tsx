@@ -5,7 +5,7 @@ import { useCollabEditor } from "../hooks/useCollabEditor";
 import { usePresence } from "../hooks/usePresence";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { motion } from "framer-motion";
-import { Loader2, Wifi, WifiOff, Share2, ArrowLeft } from "lucide-react";
+import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 
 interface CollabNoteEditorProps {
@@ -27,13 +27,14 @@ export function CollabNoteEditor({
   displayName = "Anonymous",
   photoURL = null,
 }: CollabNoteEditorProps) {
-  const { text, title, isLoading, isSynced, error } = useCollabEditor(
+  const { text, title, isLoading, isSynced, error, saveSnapshot } = useCollabEditor(
     noteId,
     userId,
     privateKey
   );
 
   const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isLocalChangeRef = useRef(false);
 
@@ -164,6 +165,19 @@ export function CollabNoteEditor({
             {isSynced ? <Wifi size={12} /> : <Loader2 size={12} className="animate-spin" />}
             {isSynced ? "Synced" : "Syncing..."}
           </div>
+
+          {/* Save button */}
+          <button
+            onClick={async () => {
+              setSaving(true);
+              try { await saveSnapshot(); } finally { setSaving(false); }
+            }}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-primary border-2 border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? "Saving..." : "Save"}
+          </button>
 
           {/* Share button */}
           {onShare && (

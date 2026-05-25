@@ -35,6 +35,8 @@ interface UseCollabEditorReturn {
   isLoading: boolean;
   isSynced: boolean;
   error: string | null;
+  /** Manually save the current state as an encrypted snapshot. */
+  saveSnapshot: () => Promise<void>;
 }
 
 const COMPACTION_THRESHOLD = 50;
@@ -190,7 +192,22 @@ export function useCollabEditor(
     };
   }, [noteId, userId, privateKey]);
 
-  return { text, title, isLoading, isSynced, error };
+  /** Manually save the current Yjs state as an encrypted snapshot to Firestore. */
+  const saveSnapshot = useCallback(async () => {
+    const ydoc = ydocRef.current;
+    const noteKey = noteKeyRef.current;
+    if (!ydoc || !noteKey) return;
+
+    try {
+      await compactSnapshot(noteId, ydoc, noteKey);
+      updateCountRef.current = 0;
+      setIsSynced(true);
+    } catch (err) {
+      console.error("Manual snapshot save failed:", err);
+    }
+  }, [noteId]);
+
+  return { text, title, isLoading, isSynced, error, saveSnapshot };
 }
 
 /** Save a full encrypted snapshot and clean up processed updates. */

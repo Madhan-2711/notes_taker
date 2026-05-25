@@ -70,33 +70,60 @@ export async function deleteNote(noteId: string): Promise<void> {
 // ── Subscribe ─────────────────────────────────────────────────────────────────
 
 /**
- * Real-time subscription to all notes authored by a user.
+ * Real-time subscription to all notes authored by a user
+ * AND all notes where the user is a collaborator.
  * Returns an unsubscribe function.
  */
 export function subscribeToNotes(
   userId: string,
   callback: (notes: Note[]) => void
 ): Unsubscribe {
-  const q = query(
+  // Query 1: Notes authored by the user
+  const authorQuery = query(
     collection(db, "notes"),
     where("authorId", "==", userId)
   );
 
-  return onSnapshot(
-    q,
-    (snap) => {
-      const data = snap.docs.map((d) => {
-        const raw = d.data();
-        return {
-          id: d.id,
-          // Treat missing mode as "normal" (backward compat for old docs)
-          mode: raw.mode || "normal",
-          ...raw,
-        } as Note;
-      });
-      data.sort((a, b) => b.createdAt - a.createdAt);
-      callback(data);
-    },
-    (err) => console.error("Firestore notes subscription error:", err)
+  // Query 2: Notes where the user is a collaborator
+  const collabQuery = query(
+    collection(db, "notes"),
+    where("collaboratorIds", "array-contains", userId)
   );
+
+  let authorNotes: Note[] = [];
+  let collabNotes: Note[] = [];
+
+  const merge = () => {
+    // Merge and deduplicate by id
+    const map = new Map<string, Note>();
+    for (const n of authorNotes) map.set(n.id, n);
+    for (const n of collabNotes) map.set(n.id, n);
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => b.createdAt - a.createdAt);
+    callback(merged);
+  };
+
+  const parseSnap = (snap: import("firebase/firestore").QuerySnapshot): Note[] =>
+    snap.docs.map((d) => {
+      const raw = d.data();
+      return {
+        id: d.id,
+        mode: raw.mode || "normal",
+        ...raw,
+      } as Note;
+    });
+
+  const unsub1 = onSnapshot(
+    authorQuery,
+    (snap) => { authorNotes = parseSnap(snap); merge(); },
+    (err) => console.error("Firestore author notes subscription error:", err)
+  );
+
+  const unsub2 = onSnapshot(
+    collabQuery,
+    (snap) => { collabNotes = parseSnap(snap); merge(); },
+    (err) => console.error("Firestore collab notes subscription error:", err)
+  );
+
+  return () => { unsub1(); unsub2(); };
 }
