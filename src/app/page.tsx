@@ -2,7 +2,7 @@
 
 import { useAuth } from "../hooks/useAuth";
 import { motion } from "framer-motion";
-import { PenLine, BookOpen, ArrowRight } from "lucide-react";
+import { PenLine, BookOpen, Users, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
@@ -50,8 +50,8 @@ export default function Home() {
         </p>
       </motion.div>
 
-      {/* Two Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 w-full max-w-2xl">
+      {/* Action Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 w-full max-w-4xl">
         {/* Write Notes Card */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -95,6 +95,30 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 text-accent font-medium text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 View Notes <ArrowRight size={16} />
+              </div>
+            </div>
+          </Link>
+        </motion.div>
+
+        {/* Friends Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.45 }}
+        >
+          <Link href="/friends" className="block group">
+            <div className="glass neubrutal rounded-[var(--radius-xl)] p-8 flex flex-col items-center text-center gap-5 min-h-[260px] justify-center transition-all duration-300 group-hover:bg-primary/5">
+              <div className="w-16 h-16 rounded-full bg-rose-500/10 flex items-center justify-center group-hover:bg-rose-500/20 transition-colors duration-300">
+                <Users size={28} className="text-rose-500" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold tracking-tight mb-2">Friends</h2>
+                <p className="text-foreground/50 text-sm leading-relaxed">
+                  Connect with friends and collaborate on encrypted notes in real-time.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-rose-500 font-medium text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                Manage Friends <ArrowRight size={16} />
               </div>
             </div>
           </Link>

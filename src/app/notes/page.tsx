@@ -2,34 +2,45 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../hooks/useAuth";
-import { db, hasValidConfig } from "../../lib/firebaseConfig";
-import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { type Note, type Group } from "../../lib/validations";
+import { useUserKeys } from "../../hooks/useUserKeys";
+import { hasValidConfig } from "../../lib/firebaseConfig";
+import { db } from "../../lib/firebaseConfig";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { type Note, type Group, type NoteMode } from "../../lib/validations";
+import {
+  subscribeToNotes,
+  updateNormalNote,
+  deleteNote,
+} from "../../lib/services/notes/normalNotesService";
 import { NoteCard } from "../../components/NoteCard";
 import { EditNoteModal } from "../../components/EditNoteModal";
 import { ViewNoteModal } from "../../components/ViewNoteModal";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Calendar, X, FolderOpen } from "lucide-react";
+import { ArrowLeft, Calendar, X, FolderOpen, Lock, Unlock, Users, Layers } from "lucide-react";
 import Link from "next/link";
+
+const MODE_FILTERS: { value: NoteMode | ""; label: string; icon: typeof Lock }[] = [
+  { value: "", label: "All", icon: Layers },
+  { value: "normal", label: "Normal", icon: Unlock },
+  { value: "secure", label: "Encrypted", icon: Lock },
+  { value: "collab", label: "Collab", icon: Users },
+];
 
 export default function NotesPage() {
   const { user, loading } = useAuth();
+  const { privateKey } = useUserKeys();
   const [notes, setNotes] = useState<Note[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [dateFilter, setDateFilter] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
+  const [modeFilter, setModeFilter] = useState<NoteMode | "">("");
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
 
-  // Subscribe to notes
+  // Subscribe to notes via service
   useEffect(() => {
     if (!user || !hasValidConfig) { setNotes([]); return; }
-    const q = query(collection(db, "notes"), where("authorId", "==", user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Note[];
-      data.sort((a, b) => b.createdAt - a.createdAt);
-      setNotes(data);
-    }, (err) => console.error("Firestore notes error:", err));
+    const unsub = subscribeToNotes(user.uid, (data) => setNotes(data));
     return () => unsub();
   }, [user]);
 
@@ -47,16 +58,16 @@ export default function NotesPage() {
 
   const handleDeleteNote = async (id: string) => {
     if (!user || !hasValidConfig) return;
-    try { await deleteDoc(doc(db, "notes", id)); }
+    try { await deleteNote(id); }
     catch (e) { console.error("Delete failed", e); }
   };
 
   const handleUpdateNote = async (id: string, title: string, content: string) => {
     if (!user || !hasValidConfig) return;
-    await updateDoc(doc(db, "notes", id), { title, content, updatedAt: Date.now() });
+    await updateNormalNote(id, title, content);
   };
 
-  // Filter notes by date and group
+  // Filter notes by date, group, and mode
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
       const matchesDate = !dateFilter
@@ -65,9 +76,12 @@ export default function NotesPage() {
       const matchesGroup = !groupFilter
         ? true
         : note.groupIds?.includes(groupFilter);
-      return matchesDate && matchesGroup;
+      const matchesMode = !modeFilter
+        ? true
+        : (note.mode || "normal") === modeFilter;
+      return matchesDate && matchesGroup && matchesMode;
     });
-  }, [notes, dateFilter, groupFilter]);
+  }, [notes, dateFilter, groupFilter, modeFilter]);
 
   // Group filtered notes by date for display
   const groupedNotes = useMemo(() => {
@@ -136,6 +150,33 @@ export default function NotesPage() {
               </button>
             )}
           </div>
+        </motion.div>
+
+        {/* Mode Filter Chips */}
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03 }}
+          className="flex items-center gap-2 flex-wrap mb-4"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/40 mr-1">
+            <Layers size={13} />
+            <span>Type:</span>
+          </div>
+          {MODE_FILTERS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setModeFilter(modeFilter === value ? "" : value)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 ${
+                modeFilter === value
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-transparent text-foreground/50 border-border/60 hover:border-foreground/40 hover:text-foreground"
+              }`}
+            >
+              <Icon size={12} />
+              {label}
+            </button>
+          ))}
         </motion.div>
 
         {/* Group Filter Chips */}
@@ -212,7 +253,7 @@ export default function NotesPage() {
             className="py-24 text-center text-foreground/40 font-medium flex flex-col items-center gap-4"
           >
             <div className="w-16 h-16 border-2 border-dashed border-border rounded-full flex items-center justify-center">🍃</div>
-            {dateFilter || groupFilter ? (
+            {dateFilter || groupFilter || modeFilter ? (
               <p>No notes found for the selected filters.</p>
             ) : (
               <p>Your space is empty. Start writing to see your notes here.</p>
@@ -227,6 +268,8 @@ export default function NotesPage() {
         onClose={() => setEditingNote(null)}
         onSave={handleUpdateNote}
         groups={groups}
+        userId={user?.uid}
+        privateKey={privateKey}
       />
 
       <ViewNoteModal
@@ -234,6 +277,8 @@ export default function NotesPage() {
         groups={groups}
         onClose={() => setViewingNote(null)}
         onEdit={(note) => { setViewingNote(null); setEditingNote(note); }}
+        userId={user?.uid}
+        privateKey={privateKey}
       />
     </>
   );

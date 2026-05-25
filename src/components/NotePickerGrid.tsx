@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { type Note } from "../lib/validations";
+import { type Note, getNoteTitle, getNoteContent } from "../lib/validations";
 import { Search, Check } from "lucide-react";
 
 interface NotePickerGridProps {
@@ -16,11 +16,11 @@ export function NotePickerGrid({ notes, selectedIds, onToggle }: NotePickerGridP
   const filtered = useMemo(() => {
     if (!search.trim()) return notes;
     const q = search.toLowerCase();
-    return notes.filter(
-      (n) =>
-        n.title.toLowerCase().includes(q) ||
-        n.content.toLowerCase().includes(q)
-    );
+    return notes.filter((n) => {
+      const title = getNoteTitle(n);
+      const content = getNoteContent(n);
+      return title.toLowerCase().includes(q) || content.toLowerCase().includes(q);
+    });
   }, [notes, search]);
 
   return (
@@ -75,10 +75,10 @@ export function NotePickerGrid({ notes, selectedIds, onToggle }: NotePickerGridP
                   </div>
 
                   <p className="font-semibold text-sm truncate pr-7 text-foreground">
-                    {note.title}
+                    {getNoteTitle(note)}
                   </p>
                   <p className="text-xs text-foreground/50 mt-0.5 line-clamp-2 leading-relaxed">
-                    {note.content}
+                    {getNoteContent(note)}
                   </p>
                   <p className="text-xs text-foreground/30 mt-1.5 font-mono">
                     {new Date(note.createdAt).toLocaleDateString(undefined, {

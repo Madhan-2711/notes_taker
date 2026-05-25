@@ -2,22 +2,50 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { useUserKeys } from "../../hooks/useUserKeys";
 import { db, hasValidConfig } from "../../lib/firebaseConfig";
-import { collection, addDoc, query, where, onSnapshot } from "firebase/firestore";
-import { noteSchema, type Group } from "../../lib/validations";
-import { addNotesToGroup } from "../../lib/groupsService";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { noteSchema, type Group, type NoteMode } from "../../lib/validations";
+import { createNormalNote } from "../../lib/services/notes/normalNotesService";
+import { createSecureNote } from "../../lib/services/notes/secureNotesService";
+import { createCollabNote } from "../../lib/services/notes/collaborativeNotesService";
+import { NoteModePicker } from "../../components/NoteModePicker";
+import { KeySetupModal } from "../../components/KeySetupModal";
+import { VaultUnlockModal } from "../../components/VaultUnlockModal";
 import { motion } from "framer-motion";
 import { ArrowLeft, Check, FolderOpen } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function WritePage() {
+  const router = useRouter();
   const { user, loading } = useAuth();
+  const {
+    publicKey,
+    isReady: keysReady,
+    hasKeys,
+    needsVaultPassword,
+    needsVaultSetup,
+    setVaultPassword,
+    unlockVault,
+    error: keyError,
+  } = useUserKeys();
+
+  const [noteMode, setNoteMode] = useState<NoteMode>("normal");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [showKeySetup, setShowKeySetup] = useState(false);
+
+  // Show key setup modal when prompted
+  useEffect(() => {
+    if (needsVaultSetup) {
+      setShowKeySetup(true);
+    }
+  }, [needsVaultSetup]);
 
   // Live-subscribe to user's groups for the multi-select
   useEffect(() => {
@@ -49,22 +77,40 @@ export default function WritePage() {
     try {
       const validData = noteSchema.parse({ title, content });
 
-      const newNote = {
-        title: validData.title,
-        content: validData.content,
-        groupIds: selectedGroupIds,
-        authorId: user.uid,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      const ref = await addDoc(collection(db, "notes"), newNote);
-
-      // Link the note to each selected group
-      if (selectedGroupIds.length > 0) {
-        await Promise.all(
-          selectedGroupIds.map((gid) => addNotesToGroup(gid, [ref.id]))
+      if (noteMode === "normal") {
+        await createNormalNote(
+          user.uid,
+          validData.title,
+          validData.content,
+          selectedGroupIds
         );
+      } else if (noteMode === "secure") {
+        if (!hasKeys || !publicKey) {
+          setError("Encryption keys are not ready. Please wait or set up your vault password.");
+          return;
+        }
+        await createSecureNote(
+          user.uid,
+          validData.title,
+          validData.content,
+          selectedGroupIds,
+          publicKey
+        );
+      } else if (noteMode === "collab") {
+        if (!hasKeys || !publicKey) {
+          setError("Encryption keys are not ready. Please wait or set up your vault password.");
+          return;
+        }
+        const newNoteId = await createCollabNote(
+          user.uid,
+          validData.title,
+          validData.content,
+          selectedGroupIds,
+          publicKey
+        );
+        // Navigate to the collaborative editor
+        router.push(`/collab/${newNoteId}`);
+        return;
       }
 
       setTitle("");
@@ -72,8 +118,9 @@ export default function WritePage() {
       setSelectedGroupIds([]);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.errors?.[0]?.message || err.message || "Failed to create note");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create note";
+      setError(message);
     }
   };
 
@@ -120,6 +167,19 @@ export default function WritePage() {
         onSubmit={handleCreateNote}
         className="glass neubrutal rounded-[var(--radius-xl)] p-8 flex flex-col gap-5"
       >
+        {/* Mode Picker */}
+        <NoteModePicker value={noteMode} onChange={setNoteMode} />
+
+        {/* Key status warning for secure mode */}
+        {noteMode === "secure" && !hasKeys && keysReady && (
+          <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-xl">
+            ⚠️ Encryption keys are being set up. Please wait a moment...
+          </div>
+        )}
+
+        {/* Divider between mode picker and form */}
+        <div className="h-px bg-border/40" />
+
         <div>
           <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
             Title
@@ -182,7 +242,9 @@ export default function WritePage() {
 
         <div className="flex items-center justify-between mt-2 pt-4 border-t border-border/30">
           <div className="flex-1">
-            {error && <span className="text-sm text-red-500 font-medium">{error}</span>}
+            {(error || keyError) && (
+              <span className="text-sm text-red-500 font-medium">{error || keyError}</span>
+            )}
             {success && (
               <motion.span
                 initial={{ opacity: 0, x: -10 }}
@@ -202,6 +264,19 @@ export default function WritePage() {
           </button>
         </div>
       </motion.form>
+
+      {/* Vault modals */}
+      <KeySetupModal
+        isOpen={showKeySetup}
+        onClose={() => setShowKeySetup(false)}
+        onSetPassword={setVaultPassword}
+      />
+
+      <VaultUnlockModal
+        isOpen={needsVaultPassword}
+        onUnlock={unlockVault}
+        error={keyError}
+      />
     </div>
   );
 }

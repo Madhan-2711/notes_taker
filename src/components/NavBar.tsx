@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
-import { PenLine, BookOpen, FolderOpen } from "lucide-react";
+import { PenLine, BookOpen, FolderOpen, Users } from "lucide-react";
 
 const NAV_LINKS = [
   { href: "/write", label: "Write", icon: PenLine },
   { href: "/notes", label: "My Notes", icon: BookOpen },
   { href: "/groups", label: "Groups", icon: FolderOpen },
+  { href: "/friends", label: "Friends", icon: Users },
 ];
 
 export function NavBar() {

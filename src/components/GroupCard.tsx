@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { type Group, type Note } from "../lib/validations";
+import { type Group, type Note, getNoteTitle } from "../lib/validations";
 import { Settings, Trash2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
@@ -100,7 +100,7 @@ export function GroupCard({ group, notes, onManage, onDelete }: GroupCardProps) 
               key={note.id}
               className="text-xs font-medium text-foreground/50 bg-border/30 px-2.5 py-1 rounded-full truncate max-w-[140px]"
             >
-              {note.title}
+              {getNoteTitle(note)}
             </span>
           ))}
           {notes.length > 4 && (
