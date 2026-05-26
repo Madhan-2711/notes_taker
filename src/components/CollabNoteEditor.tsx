@@ -261,7 +261,6 @@ export function CollabNoteEditor({
         <RemoteCursors
           users={activeUsers}
           content={content}
-          textareaRef={textareaRef}
         />
 
         <textarea
