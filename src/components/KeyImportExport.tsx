@@ -183,26 +183,28 @@ export function KeyImportExport({
       // Store in IndexedDB
       await storePrivateKey(userId, restoredPrivateKey);
 
-      // Update public key in Firestore if available
-      if (importFile.publicKeyJwk) {
-        try {
-          // The publicKeyJwk in the export is actually the private JWK
-          // We need to extract just the public parts
-          const fullJwk = JSON.parse(importFile.publicKeyJwk);
-          // Create a public-only JWK by removing private fields
-          const publicJwk = {
-            kty: fullJwk.kty,
-            n: fullJwk.n,
-            e: fullJwk.e,
-            alg: fullJwk.alg,
-            ext: fullJwk.ext,
-            key_ops: ["wrapKey"],
-          };
-          await updatePublicKey(userId, JSON.stringify(publicJwk));
-        } catch {
-          // Non-fatal — public key update failed but private key is restored
-          console.warn("Could not update public key from export");
-        }
+      // Derive the public key from the private key JWK and update Firestore
+      try {
+        const privJwk = await crypto.subtle.exportKey("jwk", restoredPrivateKey);
+        // Create a public-only JWK: only keep the public RSA fields
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { d, p, q, dp, dq, qi, ...publicFields } = privJwk;
+        const publicJwk = {
+          ...publicFields,
+          key_ops: ["wrapKey"],
+        };
+        await updatePublicKey(userId, JSON.stringify(publicJwk));
+      } catch (pubErr) {
+        console.warn("Could not update public key from import:", pubErr);
+      }
+
+      // Also store the vault backup so they don't have to set it up again
+      try {
+        const wrappedForVault = await wrapPrivateKey(restoredPrivateKey, password);
+        const { updateWrappedPrivateKey } = await import("../lib/services/social/usersService");
+        await updateWrappedPrivateKey(userId, wrappedForVault);
+      } catch (vaultErr) {
+        console.warn("Could not update vault backup:", vaultErr);
       }
 
       setSuccess("Keys imported successfully! Reloading...");

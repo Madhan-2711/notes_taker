@@ -3,9 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
+import { useUserKeys } from "../../../hooks/useUserKeys";
 import { db, hasValidConfig } from "../../../lib/firebaseConfig";
 import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { type Note, type Group } from "../../../lib/validations";
+import { subscribeToNotes, deleteNote } from "../../../lib/services/notes/normalNotesService";
 import { NoteCard } from "../../../components/NoteCard";
 import { EditNoteModal } from "../../../components/EditNoteModal";
 import { ViewNoteModal } from "../../../components/ViewNoteModal";
@@ -17,21 +19,17 @@ import Link from "next/link";
 export default function GroupDetailPage() {
   const { id: groupId } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
+  const { privateKey } = useUserKeys();
   const [notes, setNotes] = useState<Note[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [managingGroup, setManagingGroup] = useState<Group | null>(null);
 
-  // Subscribe to notes
+  // Subscribe to notes (both authored and collab)
   useEffect(() => {
     if (!user || !hasValidConfig) { setNotes([]); return; }
-    const q = query(collection(db, "notes"), where("authorId", "==", user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Note[];
-      data.sort((a, b) => b.createdAt - a.createdAt);
-      setNotes(data);
-    });
+    const unsub = subscribeToNotes(user.uid, (data) => setNotes(data));
     return () => unsub();
   }, [user]);
 
@@ -69,7 +67,7 @@ export default function GroupDetailPage() {
 
   const handleDeleteNote = async (id: string) => {
     if (!user || !hasValidConfig) return;
-    try { await deleteDoc(doc(db, "notes", id)); }
+    try { await deleteNote(id); }
     catch (e) { console.error("Delete failed", e); }
   };
 
@@ -190,6 +188,8 @@ export default function GroupDetailPage() {
         onClose={() => setEditingNote(null)}
         onSave={handleUpdateNote}
         groups={groups}
+        userId={user?.uid}
+        privateKey={privateKey}
       />
 
       {/* View Modal */}
@@ -198,6 +198,8 @@ export default function GroupDetailPage() {
         groups={groups}
         onClose={() => setViewingNote(null)}
         onEdit={(note) => { setViewingNote(null); setEditingNote(note); }}
+        userId={user?.uid}
+        privateKey={privateKey}
       />
 
       {/* Manage Group Modal */}
