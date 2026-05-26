@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import * as Y from "yjs";
 import { useCollabEditor } from "../hooks/useCollabEditor";
 import { usePresence } from "../hooks/usePresence";
 import { PresenceIndicator } from "./PresenceIndicator";
@@ -41,19 +42,71 @@ export function CollabNoteEditor({
   // Presence tracking
   const activeUsers = usePresence(noteId, userId, displayName, photoURL);
 
-  // Sync Yjs text to local state
+  // Sync Yjs text to local state, with cursor-aware remote update handling
   useEffect(() => {
     if (!text) return;
 
     // Set initial content
     setContent(text.toString());
 
-    // Observe Yjs changes
-    const observer = () => {
-      if (!isLocalChangeRef.current) {
-        setContent(text.toString());
+    // Observe Yjs changes with delta-aware cursor adjustment
+    const observer = (event: Y.YTextEvent) => {
+      if (isLocalChangeRef.current) {
+        // Local change — cursor is already correct, just reset the flag
+        isLocalChangeRef.current = false;
+        return;
       }
-      isLocalChangeRef.current = false;
+
+      // Remote change — adjust cursor position using Yjs delta
+      const textarea = textareaRef.current;
+      const prevCursor = textarea?.selectionStart ?? 0;
+      const prevSelEnd = textarea?.selectionEnd ?? prevCursor;
+
+      // Walk the delta to compute how much the cursor should shift.
+      // Delta ops are: { retain: N }, { insert: string }, { delete: N }
+      let adjustedCursor = prevCursor;
+      let adjustedSelEnd = prevSelEnd;
+      let pos = 0;
+
+      for (const op of event.delta) {
+        if (op.retain != null) {
+          // Retain — skip past unchanged characters
+          pos += op.retain;
+        } else if (op.insert != null) {
+          // Insert — if it happened before/at cursor, push cursor forward
+          const insertLen = typeof op.insert === "string" ? op.insert.length : 1;
+          if (pos <= prevCursor) {
+            adjustedCursor += insertLen;
+          }
+          if (pos <= prevSelEnd) {
+            adjustedSelEnd += insertLen;
+          }
+          pos += insertLen;
+        } else if (op.delete != null) {
+          // Delete — if it happened before cursor, pull cursor back
+          if (pos < prevCursor) {
+            const shift = Math.min(op.delete, prevCursor - pos);
+            adjustedCursor -= shift;
+          }
+          if (pos < prevSelEnd) {
+            const shift = Math.min(op.delete, prevSelEnd - pos);
+            adjustedSelEnd -= shift;
+          }
+          // pos stays the same (deleted chars no longer exist)
+        }
+      }
+
+      const newContent = text.toString();
+      setContent(newContent);
+
+      // Restore cursor after React re-renders
+      requestAnimationFrame(() => {
+        if (textarea) {
+          const clamp = (v: number) => Math.max(0, Math.min(v, textarea.value.length));
+          textarea.selectionStart = clamp(adjustedCursor);
+          textarea.selectionEnd = clamp(adjustedSelEnd);
+        }
+      });
     };
 
     text.observe(observer);
