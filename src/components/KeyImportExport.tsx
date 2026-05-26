@@ -131,18 +131,40 @@ export function KeyImportExport({
 
     const reader = new FileReader();
     reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string) as ExportedKeyFile;
-        if (data.type !== "notes_taker_keys" || !data.wrappedPrivateKey) {
-          setError("Invalid key file. Please select a valid Notes Taker key export.");
-          return;
-        }
-        setImportFile(data);
-      } catch {
-        setError("Could not read file. Make sure it's a valid JSON key export.");
-      }
+      parseKeyFileContent(ev.target?.result as string);
+    };
+    reader.onerror = () => {
+      setError("Could not read file. Try pasting the file contents instead.");
     };
     reader.readAsText(file);
+  };
+
+  /** Parse and validate the JSON content from either a file or manual paste. */
+  const parseKeyFileContent = (content: string) => {
+    try {
+      // Trim whitespace and BOM characters that mobile transfers may add
+      const cleaned = content.trim().replace(/^\uFEFF/, "");
+      const data = JSON.parse(cleaned);
+
+      // Validate structure
+      if (data.type === "notes_taker_keys" && data.wrappedPrivateKey) {
+        setImportFile(data as ExportedKeyFile);
+        setError(null);
+        return;
+      }
+
+      // Also accept if it has the right fields but missing type tag
+      if (data.wrappedPrivateKey && data.publicKeyJwk) {
+        setImportFile({ ...data, type: "notes_taker_keys", version: 1 } as ExportedKeyFile);
+        setError(null);
+        return;
+      }
+
+      setError(`Invalid key file. Expected a Notes Taker key export but got: ${Object.keys(data).join(", ")}`);
+    } catch (parseErr) {
+      console.error("Key file parse error:", parseErr);
+      setError("Could not parse file as JSON. Make sure you selected the correct .json key file.");
+    }
   };
 
   const handleImport = async () => {
@@ -342,11 +364,11 @@ export function KeyImportExport({
                   Select a previously exported key file and enter the password you used to protect it.
                 </p>
 
-                {/* File picker */}
+                {/* File picker — accept all files on mobile for compatibility */}
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".json"
+                  accept=".json,application/json,text/plain,*/*"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -370,6 +392,34 @@ export function KeyImportExport({
                     )}
                   </div>
                 </button>
+
+                {/* Paste fallback for mobile */}
+                {!importFile && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-xs text-foreground/40 font-medium">
+                      File picker not working? Open the .json file in a text editor, copy everything, and paste below:
+                    </p>
+                    <textarea
+                      placeholder='Paste the JSON content here...'
+                      rows={3}
+                      className="w-full bg-border/20 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData("text");
+                        if (text) {
+                          setImportFileName("Pasted content");
+                          parseKeyFileContent(text);
+                        }
+                      }}
+                      onChange={(e) => {
+                        const text = e.target.value.trim();
+                        if (text.length > 20) {
+                          setImportFileName("Pasted content");
+                          parseKeyFileContent(text);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
 
                 {/* Password */}
                 {importFile && (
