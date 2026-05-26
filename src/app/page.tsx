@@ -31,7 +31,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-4xl mx-auto w-full">
+    <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-6 max-w-5xl mx-auto w-full">
       {/* Greeting */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -51,7 +51,7 @@ export default function Home() {
       </motion.div>
 
       {/* Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 w-full max-w-4xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 w-full max-w-5xl">
         {/* Write Notes Card */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}

@@ -20,15 +20,15 @@ export function NavBar() {
 
   return (
     <nav className="border-b border-border/50 bg-white/60 backdrop-blur-sm">
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="flex items-center gap-1 h-11">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-1 h-11 overflow-x-auto scrollbar-hide">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap shrink-0 ${
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-foreground/50 hover:text-foreground hover:bg-border/40"

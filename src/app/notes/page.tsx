@@ -114,7 +114,7 @@ export default function NotesPage() {
 
   return (
     <>
-      <div className="flex-1 max-w-5xl mx-auto w-full p-6 mt-4">
+      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -229,7 +229,7 @@ export default function NotesPage() {
                   <span className="flex-1 h-px bg-border/50"></span>
                   <span className="text-foreground/25">{dateNotes.length}</span>
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                   <AnimatePresence>
                     {dateNotes.map((note) => (
                       <NoteCard

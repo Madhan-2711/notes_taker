@@ -45,4 +45,11 @@
   .neubrutal {
     @apply border-2 border-slate-900 shadow-[var(--neubrutalism-shadow)] transition-all duration-200 hover:shadow-[var(--neubrutalism-shadow-hover)] hover:-translate-y-0.5 hover:-translate-x-0.5;
   }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
