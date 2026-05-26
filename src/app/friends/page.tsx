@@ -24,9 +24,9 @@ import { FriendCard } from "../../components/FriendCard";
 import { CollabInviteCard } from "../../components/CollabInviteCard";
 import { VaultUnlockModal } from "../../components/VaultUnlockModal";
 import { KeySetupModal } from "../../components/KeySetupModal";
-import { KeyImportExport } from "../../components/KeyImportExport";
+import { KeyBackupRestore } from "../../components/KeyBackupRestore";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock } from "lucide-react";
+import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock, CloudUpload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -198,32 +198,26 @@ export default function FriendsPage() {
         <motion.div
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between gap-3 p-4 mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-800"
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-800"
         >
           <div className="flex items-center gap-2.5">
             <Lock size={16} className="shrink-0" />
             <span className="text-sm font-semibold">
-              Set a vault password to back up your encryption keys. Without it, you&#39;ll lose access to encrypted notes if you switch devices.
+              Back up your encryption keys to the cloud so you can access them on other devices.
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setShowKeyExport(true)}
-              className="bg-foreground/10 hover:bg-foreground/20 text-foreground/70 font-bold text-xs px-3 py-2 rounded-lg transition-colors"
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
             >
-              Import / Export
-            </button>
-            <button
-              onClick={() => setShowKeySetup(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors"
-            >
-              Set Password
+              <CloudUpload size={13} />
+              Backup / Restore
             </button>
           </div>
         </motion.div>
       )}
 
-      {/* Import/Export button — always visible when user has keys */}
       {!needsVaultSetup && privateKey && (
         <motion.div
           initial={{ opacity: 0, y: -5 }}
@@ -234,8 +228,8 @@ export default function FriendsPage() {
             onClick={() => setShowKeyExport(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-border/50 text-xs font-bold text-foreground/50 hover:text-foreground hover:border-foreground/30 transition-colors"
           >
-            <Lock size={13} />
-            Import / Export Keys
+            <CloudUpload size={13} />
+            Backup / Restore Keys
           </button>
         </motion.div>
       )}
@@ -442,13 +436,13 @@ export default function FriendsPage() {
         onSetPassword={setVaultPassword}
       />
 
-      {/* Key Import/Export Modal */}
-      <KeyImportExport
+      {/* Key Backup/Restore Modal */}
+      <KeyBackupRestore
         isOpen={showKeyExport}
         onClose={() => setShowKeyExport(false)}
         privateKey={privateKey}
         userId={user.uid}
-        onImportSuccess={() => {}}
+        onRestoreSuccess={() => {}}
       />
     </div>
   );

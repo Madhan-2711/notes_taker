@@ -69,10 +69,14 @@ export function usePresence(
   }, [noteId, userId, displayName, photoURL]);
 
   // Update cursor position (called from editor on cursor change)
+  const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updateCursor = useCallback((position: number) => {
     cursorRef.current = position;
-    // Immediately publish cursor update
-    publishPresence();
+    // Debounce cursor publish to avoid excessive Firestore writes
+    if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+    cursorTimerRef.current = setTimeout(() => {
+      publishPresence();
+    }, 500);
   }, [publishPresence]);
 
   useEffect(() => {

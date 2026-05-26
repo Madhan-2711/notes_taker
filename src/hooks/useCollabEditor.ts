@@ -39,7 +39,7 @@ interface UseCollabEditorReturn {
 }
 
 const COMPACTION_THRESHOLD = 50;
-const DEBOUNCE_MS = 100;
+const DEBOUNCE_MS = 150;
 
 export function useCollabEditor(
   noteId: string,
@@ -90,7 +90,7 @@ export function useCollabEditor(
         setText(ytext);
 
         // Listen for local changes and publish them
-        ydoc.on("update", (update: Uint8Array, origin: string) => {
+        ydoc.on("update", (_update: Uint8Array, origin: string) => {
           if (origin === "remote" || isApplyingRemoteRef.current) return;
 
           // Debounce: batch local changes before encrypting & publishing
@@ -100,7 +100,9 @@ export function useCollabEditor(
 
           debounceTimerRef.current = setTimeout(async () => {
             try {
-              const base64 = arrayBufferToBase64(update.buffer);
+              // Always send full state — debounce may skip intermediate deltas
+              const fullUpdate = Y.encodeStateAsUpdate(ydoc);
+              const base64 = arrayBufferToBase64(fullUpdate.buffer);
               const encrypted = await encryptData(base64, noteKey);
 
               await addDoc(collection(db, "note_updates"), {
