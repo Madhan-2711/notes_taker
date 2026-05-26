@@ -24,6 +24,7 @@ import { FriendCard } from "../../components/FriendCard";
 import { CollabInviteCard } from "../../components/CollabInviteCard";
 import { VaultUnlockModal } from "../../components/VaultUnlockModal";
 import { KeySetupModal } from "../../components/KeySetupModal";
+import { KeyImportExport } from "../../components/KeyImportExport";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock } from "lucide-react";
 import Link from "next/link";
@@ -50,6 +51,7 @@ export default function FriendsPage() {
   const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[]>([]);
   const [collabInvites, setCollabInvites] = useState<CollabInvite[]>([]);
   const [showKeySetup, setShowKeySetup] = useState(false);
+  const [showKeyExport, setShowKeyExport] = useState(false);
 
   // Show key setup modal when prompted
   useEffect(() => {
@@ -204,11 +206,36 @@ export default function FriendsPage() {
               Set a vault password to back up your encryption keys. Without it, you&#39;ll lose access to encrypted notes if you switch devices.
             </span>
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowKeyExport(true)}
+              className="bg-foreground/10 hover:bg-foreground/20 text-foreground/70 font-bold text-xs px-3 py-2 rounded-lg transition-colors"
+            >
+              Import / Export
+            </button>
+            <button
+              onClick={() => setShowKeySetup(true)}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors"
+            >
+              Set Password
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Import/Export button — always visible when user has keys */}
+      {!needsVaultSetup && privateKey && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex justify-end mb-4"
+        >
           <button
-            onClick={() => setShowKeySetup(true)}
-            className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors shrink-0"
+            onClick={() => setShowKeyExport(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-border/50 text-xs font-bold text-foreground/50 hover:text-foreground hover:border-foreground/30 transition-colors"
           >
-            Set Password
+            <Lock size={13} />
+            Import / Export Keys
           </button>
         </motion.div>
       )}
@@ -413,6 +440,15 @@ export default function FriendsPage() {
         isOpen={showKeySetup}
         onClose={() => setShowKeySetup(false)}
         onSetPassword={setVaultPassword}
+      />
+
+      {/* Key Import/Export Modal */}
+      <KeyImportExport
+        isOpen={showKeyExport}
+        onClose={() => setShowKeyExport(false)}
+        privateKey={privateKey}
+        userId={user.uid}
+        onImportSuccess={() => {}}
       />
     </div>
   );
