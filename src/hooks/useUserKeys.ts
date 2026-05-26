@@ -78,6 +78,12 @@ export function useUserKeys(): UseUserKeysReturn {
             setPublicKey(pubKey);
           }
 
+          // Check if vault backup exists — if not, prompt setup
+          const wrappedKey = await getWrappedPrivateKey(user!.uid);
+          if (!wrappedKey && !cancelled) {
+            setNeedsVaultSetup(true);
+          }
+
           setIsReady(true);
           return;
         }

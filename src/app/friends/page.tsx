@@ -191,6 +191,28 @@ export default function FriendsPage() {
         <h1 className="text-2xl font-bold tracking-tight">Friends</h1>
       </motion.div>
 
+      {/* Vault Setup Banner — always visible when vault backup is missing */}
+      {needsVaultSetup && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between gap-3 p-4 mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-800"
+        >
+          <div className="flex items-center gap-2.5">
+            <Lock size={16} className="shrink-0" />
+            <span className="text-sm font-semibold">
+              Set a vault password to back up your encryption keys. Without it, you&#39;ll lose access to encrypted notes if you switch devices.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowKeySetup(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors shrink-0"
+          >
+            Set Password
+          </button>
+        </motion.div>
+      )}
+
       {/* Search / Send Request */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
