@@ -1,22 +1,20 @@
 "use client";
 
 /**
- * RemoteCursors — shows where remote collaborators are typing.
+ * RemoteCursors — visual cursor indicators for remote collaborators.
  *
- * Instead of fragile pixel-based positioning over a textarea (which renders
- * text differently from any overlay element), this uses a simple line-based
- * approach: colored markers on the left edge showing which line each remote
- * user is on.
+ * Renders colored bars on the left edge of the textarea at the line where
+ * each remote user is typing. Uses the textarea's line-height to position
+ * bars accurately without needing per-character pixel measurement.
  */
 
-import { useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { type PresenceUser } from "../hooks/usePresence";
 
 interface RemoteCursorsProps {
-  /** Remote users with their cursor positions */
   users: PresenceUser[];
-  /** Current text content for computing line numbers */
   content: string;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 /** Convert character offset to line number (0-indexed) */
@@ -29,21 +27,46 @@ function getLineFromOffset(content: string, offset: number): number {
   return line;
 }
 
-/** Get total line count */
-function getLineCount(content: string): number {
-  if (!content) return 1;
-  let count = 1;
-  for (let i = 0; i < content.length; i++) {
-    if (content[i] === "\n") count++;
-  }
-  return count;
-}
+export function RemoteCursors({ users, content, textareaRef }: RemoteCursorsProps) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const [lineHeight, setLineHeight] = useState(28); // default
+  const [paddingTop, setPaddingTop] = useState(0);
 
-export function RemoteCursors({ users, content }: RemoteCursorsProps) {
   const usersWithCursors = users.filter((u) => u.cursorPosition != null);
-  const totalLines = getLineCount(content);
 
-  // Compute which line each user is on
+  // Measure line height from textarea computed styles
+  const measureStyles = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const styles = window.getComputedStyle(textarea);
+    const lh = parseFloat(styles.lineHeight);
+    if (!isNaN(lh) && lh > 0) setLineHeight(lh);
+
+    const pt = parseFloat(styles.paddingTop);
+    if (!isNaN(pt)) setPaddingTop(pt);
+  }, [textareaRef]);
+
+  // Track scroll position and measure on mount
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    measureStyles();
+
+    const handleScroll = () => setScrollTop(textarea.scrollTop);
+    textarea.addEventListener("scroll", handleScroll);
+
+    const observer = new ResizeObserver(measureStyles);
+    observer.observe(textarea);
+
+    return () => {
+      textarea.removeEventListener("scroll", handleScroll);
+      observer.disconnect();
+    };
+  }, [textareaRef, measureStyles]);
+
+  // Compute line positions for each user
   const userLines = useMemo(() => {
     return usersWithCursors.map((user) => ({
       user,
@@ -54,23 +77,41 @@ export function RemoteCursors({ users, content }: RemoteCursorsProps) {
   if (userLines.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1.5 mb-3">
-      {userLines.map(({ user, line }) => (
-        <div
-          key={user.uid}
-          className="flex items-center gap-2 text-xs font-semibold animate-pulse"
-          style={{ color: user.cursorColor }}
-        >
+    <div className="absolute left-0 top-0 bottom-0 w-full pointer-events-none overflow-hidden" style={{ zIndex: 5 }}>
+      {userLines.map(({ user, line }) => {
+        const top = paddingTop + line * lineHeight - scrollTop;
+
+        // Don't render if scrolled out of view
+        if (top < -lineHeight || top > 2000) return null;
+
+        return (
           <div
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: user.cursorColor }}
-          />
-          <span>
-            {user.displayName.split(" ")[0]} is typing on line {line + 1}
-            {totalLines > 1 && <span className="text-foreground/30 font-normal"> / {totalLines}</span>}
-          </span>
-        </div>
-      ))}
+            key={user.uid}
+            className="absolute left-0 flex items-center transition-all duration-200 ease-out"
+            style={{ top }}
+          >
+            {/* Colored bar on left edge */}
+            <div
+              className="w-[3px] rounded-full"
+              style={{
+                height: lineHeight,
+                backgroundColor: user.cursorColor,
+                opacity: 0.8,
+              }}
+            />
+            {/* Name tag */}
+            <div
+              className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white whitespace-nowrap shadow-sm"
+              style={{
+                backgroundColor: user.cursorColor,
+                opacity: 0.9,
+              }}
+            >
+              {user.displayName.split(" ")[0]}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

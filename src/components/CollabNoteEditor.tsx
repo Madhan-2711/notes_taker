@@ -15,9 +15,7 @@ interface CollabNoteEditorProps {
   userId: string;
   privateKey: CryptoKey | null;
   onShare?: () => void;
-  /** Display name for presence */
   displayName?: string;
-  /** Photo URL for presence */
   photoURL?: string | null;
 }
 
@@ -35,35 +33,42 @@ export function CollabNoteEditor({
     privateKey
   );
 
-  const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isLocalChangeRef = useRef(false);
+  const editorWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Track content in a ref to avoid React re-render on remote updates
+  const contentRef = useRef("");
 
   // Presence tracking with cursor
   const { activeUsers, updateCursor } = usePresence(noteId, userId, displayName, photoURL);
 
-  // Sync Yjs text to local state, with cursor-aware remote update handling
+  // Sync Yjs text to textarea — bypass React state to avoid cursor jumping
   useEffect(() => {
     if (!text) return;
 
     // Set initial content
-    setContent(text.toString());
+    const initial = text.toString();
+    contentRef.current = initial;
+    if (textareaRef.current) {
+      textareaRef.current.value = initial;
+    }
 
-    // Observe Yjs changes with delta-aware cursor adjustment
     const observer = (event: Y.YTextEvent) => {
       if (isLocalChangeRef.current) {
-        // Local change — cursor is already correct, just reset the flag
         isLocalChangeRef.current = false;
         return;
       }
 
-      // Remote change — adjust cursor position using Yjs delta
+      // Remote change — update textarea directly (no React setState)
       const textarea = textareaRef.current;
-      const prevCursor = textarea?.selectionStart ?? 0;
-      const prevSelEnd = textarea?.selectionEnd ?? prevCursor;
+      if (!textarea) return;
 
-      // Walk the delta to compute how much the cursor should shift.
+      const prevCursor = textarea.selectionStart;
+      const prevSelEnd = textarea.selectionEnd;
+
+      // Walk the delta to compute cursor shift
       let adjustedCursor = prevCursor;
       let adjustedSelEnd = prevSelEnd;
       let pos = 0;
@@ -73,12 +78,8 @@ export function CollabNoteEditor({
           pos += op.retain;
         } else if (op.insert != null) {
           const insertLen = typeof op.insert === "string" ? op.insert.length : 1;
-          if (pos <= prevCursor) {
-            adjustedCursor += insertLen;
-          }
-          if (pos <= prevSelEnd) {
-            adjustedSelEnd += insertLen;
-          }
+          if (pos <= prevCursor) adjustedCursor += insertLen;
+          if (pos <= prevSelEnd) adjustedSelEnd += insertLen;
           pos += insertLen;
         } else if (op.delete != null) {
           if (pos < prevCursor) {
@@ -92,17 +93,15 @@ export function CollabNoteEditor({
         }
       }
 
+      // Directly set textarea value (bypass React render cycle)
       const newContent = text.toString();
-      setContent(newContent);
+      contentRef.current = newContent;
+      textarea.value = newContent;
 
-      // Restore cursor after React re-renders
-      requestAnimationFrame(() => {
-        if (textarea) {
-          const clamp = (v: number) => Math.max(0, Math.min(v, textarea.value.length));
-          textarea.selectionStart = clamp(adjustedCursor);
-          textarea.selectionEnd = clamp(adjustedSelEnd);
-        }
-      });
+      // Immediately restore cursor — no requestAnimationFrame needed
+      const clamp = (v: number) => Math.max(0, Math.min(v, textarea.value.length));
+      textarea.selectionStart = clamp(adjustedCursor);
+      textarea.selectionEnd = clamp(adjustedSelEnd);
     };
 
     text.observe(observer);
@@ -115,10 +114,8 @@ export function CollabNoteEditor({
       if (!text) return;
 
       const newValue = e.target.value;
+      const oldValue = contentRef.current;
       isLocalChangeRef.current = true;
-
-      // Calculate the diff and apply to Yjs
-      const oldValue = text.toString();
 
       if (newValue.length > oldValue.length) {
         // Insertion
@@ -149,7 +146,7 @@ export function CollabNoteEditor({
         }
       }
 
-      setContent(newValue);
+      contentRef.current = newValue;
 
       // Publish cursor position
       updateCursor(e.target.selectionEnd);
@@ -252,26 +249,29 @@ export function CollabNoteEditor({
 
       {/* Editor with remote cursors */}
       <motion.div
+        ref={editorWrapperRef}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         className="glass neubrutal rounded-[var(--radius-xl)] p-4 sm:p-8 relative"
       >
-        {/* Remote cursor indicators */}
+        {/* Remote cursor line indicators (left edge bars) */}
         <RemoteCursors
           users={activeUsers}
-          content={content}
+          content={contentRef.current}
+          textareaRef={textareaRef}
         />
 
         <textarea
           ref={textareaRef}
-          value={content}
+          defaultValue=""
           onChange={handleChange}
           onSelect={handleCursorChange}
           onKeyUp={handleCursorChange}
           onClick={handleCursorChange}
           placeholder="Start collaborating..."
           className="w-full bg-transparent min-h-[50vh] sm:min-h-[400px] resize-none focus:outline-none placeholder:text-foreground/25 leading-relaxed text-foreground/85 text-base sm:text-lg"
+          style={{ lineHeight: "1.75em" }}
         />
       </motion.div>
     </div>
