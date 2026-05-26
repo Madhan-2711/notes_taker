@@ -273,9 +273,12 @@ export function KeyImportExport({
             {/* ── Menu Mode ── */}
             {mode === "menu" && !success && (
               <div className="flex flex-col gap-3">
-                <p className="text-sm text-foreground/50">
+              <p className="text-sm text-foreground/50">
                   Export your encryption keys to a password-protected file, or import keys from a previous export.
                 </p>
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium">
+                  ⚠️ <strong>Important:</strong> Always export from the device that <em>created</em> your encrypted notes. Importing keys from a different device won&#39;t decrypt notes created elsewhere.
+                </div>
 
                 <button
                   onClick={() => { resetState(); setMode("export"); }}

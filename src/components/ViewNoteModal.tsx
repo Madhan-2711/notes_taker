@@ -215,6 +215,9 @@ export function ViewNoteModal({
                       <p className="text-lg font-semibold text-foreground/80">Decryption Failed</p>
                       <p className="text-sm text-foreground/45 mt-1 max-w-sm">{decryptError}</p>
                     </div>
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium max-w-sm text-left">
+                      <strong>Tip:</strong> If you&#39;re on a different device, make sure you&#39;ve imported the keys from the device that created this note. Go to <strong>Friends → Import/Export Keys</strong>.
+                    </div>
                   </div>
                 ) : decryptedContent ? (
                   <p className="text-foreground/85 leading-[1.85] whitespace-pre-wrap break-words text-lg">

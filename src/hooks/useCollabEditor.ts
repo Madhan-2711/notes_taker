@@ -39,7 +39,7 @@ interface UseCollabEditorReturn {
 }
 
 const COMPACTION_THRESHOLD = 50;
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 100;
 
 export function useCollabEditor(
   noteId: string,
@@ -100,8 +100,7 @@ export function useCollabEditor(
 
           debounceTimerRef.current = setTimeout(async () => {
             try {
-              const fullUpdate = Y.encodeStateAsUpdate(ydoc);
-              const base64 = arrayBufferToBase64(fullUpdate.buffer);
+              const base64 = arrayBufferToBase64(update.buffer);
               const encrypted = await encryptData(base64, noteKey);
 
               await addDoc(collection(db, "note_updates"), {
