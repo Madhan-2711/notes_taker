@@ -4,14 +4,14 @@
  * KeyImportExport — Allows users to export their private key as a
  * password-protected file, and import it on another device.
  *
- * Export: private key → PBKDF2+AES-KW wrap → JSON file download
- * Import: JSON file → password → unwrap → store in IndexedDB
+ * Export: private key → PBKDF2+AES-GCM encrypt → JSON file download
+ * Import: JSON file → password → decrypt → store in IndexedDB
  */
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Upload, X, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
-import { wrapPrivateKey, unwrapPrivateKey, storePrivateKey, exportPublicKey } from "../lib/services/crypto/keys";
+import { wrapPrivateKey, unwrapPrivateKey, storePrivateKey } from "../lib/services/crypto/keys";
 import { updatePublicKey } from "../lib/services/social/usersService";
 
 interface KeyImportExportProps {
@@ -87,10 +87,7 @@ export function KeyImportExport({
       // Wrap private key with the user's chosen password
       const wrappedKey = await wrapPrivateKey(privateKey, password);
 
-      // Also export the public key so we can restore both on import
-      const publicKeyJwk = await exportPublicKey(privateKey);
-      // Actually we need the public key from the keypair, but we can derive it
-      // For RSA-OAEP, we export the private key's JWK which contains all info
+      // Export the private key JWK (contains public key components too)
       const privJwk = await crypto.subtle.exportKey("jwk", privateKey);
 
       const exportData: ExportedKeyFile = {

@@ -104,12 +104,9 @@ export async function clearPrivateKey(uid: string): Promise<void> {
   await del(IDB_KEY_PREFIX + uid);
 }
 
-// ── Vault Password Wrapping ──────────────────────────────────────────────────
-
 /**
- * Derive an AES-KW key from a vault password using PBKDF2.
- * Uses a fixed salt derived from the password itself (acceptable since the
- * wrapped key is already high-entropy and we need deterministic derivation).
+ * Derive an AES-GCM key from a vault password using PBKDF2.
+ * Uses a deterministic salt derived from the password itself.
  */
 async function deriveWrappingKey(password: string): Promise<{
   wrappingKey: CryptoKey;
@@ -138,17 +135,19 @@ async function deriveWrappingKey(password: string): Promise<{
       hash: "SHA-256",
     },
     keyMaterial,
-    { name: "AES-KW", length: 256 },
+    { name: "AES-GCM", length: 256 },
     false,
-    ["wrapKey", "unwrapKey"]
+    ["encrypt", "decrypt"]
   );
 
   return { wrappingKey, salt };
 }
 
 /**
- * Wrap a private key with a vault password for Firestore backup.
- * Returns a base64-encoded wrapped key string.
+ * Wrap a private key with a vault password for backup.
+ * Exports the private key as JWK, then encrypts with AES-GCM
+ * using a PBKDF2-derived key from the password.
+ * Returns a base64-encoded string containing: [4-byte IV length][IV][ciphertext]
  */
 export async function wrapPrivateKey(
   privateKey: CryptoKey,
@@ -156,41 +155,35 @@ export async function wrapPrivateKey(
 ): Promise<string> {
   const { wrappingKey } = await deriveWrappingKey(password);
 
-  // First export the private key as JWK, then import as a raw-wrappable key
+  // Export the private key as JWK and encode to bytes
   const jwk = await crypto.subtle.exportKey("jwk", privateKey);
   const jwkString = JSON.stringify(jwk);
   const encoder = new TextEncoder();
   const jwkBytes = encoder.encode(jwkString);
 
-  // Pad to multiple of 8 bytes (required by AES-KW)
-  const paddedLength = Math.ceil(jwkBytes.length / 8) * 8;
-  const padded = new Uint8Array(paddedLength);
-  padded.set(jwkBytes);
-
-  // Import as a generic "raw" key for wrapping
-  const rawKey = await crypto.subtle.importKey(
-    "raw",
-    padded,
-    { name: "AES-GCM", length: paddedLength * 8 > 256 ? 256 : 128 },
-    true,
-    ["encrypt"]
+  // Encrypt using AES-GCM with a random 12-byte IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    wrappingKey,
+    jwkBytes
   );
 
-  const wrapped = await crypto.subtle.wrapKey("raw", rawKey, wrappingKey, "AES-KW");
+  // Combine: [4-byte IV length][IV][ciphertext]
+  const ivLenBuf = new Uint8Array(4);
+  new DataView(ivLenBuf.buffer).setUint32(0, iv.length);
 
-  // Store length prefix so we can trim padding on unwrap
-  const lengthPrefix = new Uint8Array(4);
-  new DataView(lengthPrefix.buffer).setUint32(0, jwkBytes.length);
-
-  const combined = new Uint8Array(4 + wrapped.byteLength);
-  combined.set(lengthPrefix);
-  combined.set(new Uint8Array(wrapped), 4);
+  const combined = new Uint8Array(4 + iv.length + encrypted.byteLength);
+  combined.set(ivLenBuf, 0);
+  combined.set(iv, 4);
+  combined.set(new Uint8Array(encrypted), 4 + iv.length);
 
   return arrayBufferToBase64(combined.buffer);
 }
 
 /**
  * Unwrap a private key from a vault password backup.
+ * Decrypts the AES-GCM ciphertext, then imports the JWK as an RSA private key.
  * Throws if the password is wrong.
  */
 export async function unwrapPrivateKey(
@@ -200,29 +193,22 @@ export async function unwrapPrivateKey(
   const { wrappingKey } = await deriveWrappingKey(password);
 
   const combined = new Uint8Array(base64ToArrayBuffer(wrapped));
-  const originalLength = new DataView(combined.buffer).getUint32(0);
-  const wrappedBytes = combined.slice(4);
 
-  const paddedLength = Math.ceil(originalLength / 8) * 8;
+  // Parse: [4-byte IV length][IV][ciphertext]
+  const ivLength = new DataView(combined.buffer).getUint32(0);
+  const iv = combined.slice(4, 4 + ivLength);
+  const ciphertext = combined.slice(4 + ivLength);
 
-  const unwrappedKey = await crypto.subtle.unwrapKey(
-    "raw",
-    wrappedBytes,
+  // Decrypt using AES-GCM
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
     wrappingKey,
-    "AES-KW",
-    { name: "AES-GCM", length: paddedLength * 8 > 256 ? 256 : 128 },
-    true,
-    ["encrypt"]
+    ciphertext
   );
-
-  // Extract the raw bytes and trim padding
-  const rawBytes = new Uint8Array(
-    await crypto.subtle.exportKey("raw", unwrappedKey)
-  );
-  const jwkBytes = rawBytes.slice(0, originalLength);
 
   const decoder = new TextDecoder();
-  const jwkString = decoder.decode(jwkBytes);
+  const jwkString = decoder.decode(decrypted);
 
   return importPrivateKey(jwkString);
 }
+
