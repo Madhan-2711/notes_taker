@@ -238,8 +238,6 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
-# Optional but strongly recommended in production
-NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY=your-recaptcha-enterprise-site-key
 ```
 
 ### 4. Deploy Firestore Security Rules

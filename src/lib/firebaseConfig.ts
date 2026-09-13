@@ -1,6 +1,5 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, type Auth } from "firebase/auth";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 import {
   getFirestore,
   initializeFirestore,
@@ -48,13 +47,6 @@ if (hasValidConfig) {
       console.error("Auth persistence error:", error);
     });
 
-    const appCheckSiteKey = process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY;
-    if (appCheckSiteKey && !appAlreadyExists) {
-      initializeAppCheck(app, {
-        provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
-        isTokenAutoRefreshEnabled: true,
-      });
-    }
   }
 } else {
   // Provide stubs so that the app can compile and render without Firebase credentials.
