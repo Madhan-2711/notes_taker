@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { type UserProfile } from "../lib/validations";
 import { getCollaborators, revokeAccess } from "../lib/services/social/collaborationService";
 import { getFriends } from "../lib/services/social/friendsService";
@@ -30,19 +30,29 @@ export function CollaboratorManager({
   const [permission, setPermission] = useState<"viewer" | "editor">("editor");
   const [showInviteForm, setShowInviteForm] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    loadData();
-  }, [isOpen, noteId, userId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const [collabs, friendsList] = await Promise.all([
       getCollaborators(noteId),
       getFriends(userId),
     ]);
     setCollaborators(collabs);
     setFriends(friendsList);
-  };
+  }, [noteId, userId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    Promise.all([getCollaborators(noteId), getFriends(userId)]).then(
+      ([collabs, friendsList]) => {
+        if (cancelled) return;
+        setCollaborators(collabs);
+        setFriends(friendsList);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, noteId, userId]);
 
   const handleInvite = async () => {
     if (!selectedFriend) return;
@@ -61,7 +71,7 @@ export function CollaboratorManager({
   };
 
   const handleRevoke = async (collaboratorId: string) => {
-    await revokeAccess(noteId, collaboratorId);
+    await revokeAccess(noteId, userId, collaboratorId);
     await loadData();
   };
 
@@ -110,7 +120,9 @@ export function CollaboratorManager({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">{collab.displayName}</p>
-                      <p className="text-xs text-foreground/40 truncate">{collab.email}</p>
+                      {collab.email && (
+                        <p className="text-xs text-foreground/40 truncate">{collab.email}</p>
+                      )}
                     </div>
                     <button
                       onClick={() => handleRevoke(collab.uid)}
@@ -153,7 +165,9 @@ export function CollaboratorManager({
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{friend.displayName}</p>
-                            <p className="text-xs text-foreground/40 truncate">{friend.email}</p>
+                            {friend.email && (
+                              <p className="text-xs text-foreground/40 truncate">{friend.email}</p>
+                            )}
                           </div>
                         </button>
                       ))}

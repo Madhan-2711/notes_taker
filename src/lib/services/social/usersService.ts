@@ -8,10 +8,6 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  query,
-  collection,
-  where,
-  getDocs,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { type UserProfile } from "../../validations";
@@ -26,29 +22,51 @@ export async function getOrCreateUserProfile(
   user: FirebaseUser,
   publicKeyJwk?: string
 ): Promise<UserProfile> {
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
+  const privateRef = doc(db, "users", user.uid);
+  const publicRef = doc(db, "public_profiles", user.uid);
+  const [privateSnap, publicSnap] = await Promise.all([
+    getDoc(privateRef),
+    getDoc(publicRef),
+  ]);
 
-  if (snap.exists()) {
-    return { uid: snap.id, ...snap.data() } as UserProfile;
+  const legacy = privateSnap.exists() ? privateSnap.data() : {};
+  const privateProfile = {
+    email: user.email || "",
+    wrappedPrivateKey: legacy.wrappedPrivateKey || "",
+    createdAt: legacy.createdAt || Date.now(),
+  };
+  const publicProfile = publicSnap.exists()
+    ? publicSnap.data()
+    : {
+        displayName: user.displayName || "Anonymous",
+        photoURL: user.photoURL || null,
+        publicKey: legacy.publicKey || publicKeyJwk || "",
+        createdAt: legacy.createdAt || Date.now(),
+      };
+
+  if (!privateSnap.exists()) await setDoc(privateRef, privateProfile);
+  if (!publicSnap.exists()) await setDoc(publicRef, publicProfile);
+
+  if (user.email) {
+    await setDoc(doc(db, "email_directory", user.email.toLowerCase()), {
+      uid: user.uid,
+    });
   }
 
-  // Create new profile
-  const profile: Omit<UserProfile, "uid"> = {
-    email: user.email || "",
-    displayName: user.displayName || "Anonymous",
-    photoURL: user.photoURL || null,
-    publicKey: publicKeyJwk || "",
-    createdAt: Date.now(),
+  return {
+    uid: user.uid,
+    email: privateProfile.email,
+    displayName: publicProfile.displayName || "Anonymous",
+    photoURL: publicProfile.photoURL || null,
+    publicKey: publicProfile.publicKey || "",
+    wrappedPrivateKey: privateProfile.wrappedPrivateKey || undefined,
+    createdAt: publicProfile.createdAt || privateProfile.createdAt,
   };
-
-  await setDoc(ref, profile);
-  return { uid: user.uid, ...profile };
 }
 
 /** Fetch a user's public CryptoKey from their Firestore profile. */
 export async function getUserPublicKey(uid: string): Promise<CryptoKey> {
-  const ref = doc(db, "users", uid);
+  const ref = doc(db, "public_profiles", uid);
   const snap = await getDoc(ref);
 
   if (!snap.exists()) {
@@ -67,15 +85,19 @@ export async function getUserPublicKey(uid: string): Promise<CryptoKey> {
 export async function searchUserByEmail(
   email: string
 ): Promise<UserProfile | null> {
-  const q = query(
-    collection(db, "users"),
-    where("email", "==", email.toLowerCase().trim())
-  );
-  const snap = await getDocs(q);
+  const normalizedEmail = email.toLowerCase().trim();
+  const directorySnap = await getDoc(doc(db, "email_directory", normalizedEmail));
+  if (!directorySnap.exists()) return null;
 
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { uid: d.id, ...d.data() } as UserProfile;
+  const uid = directorySnap.data().uid as string;
+  const profileSnap = await getDoc(doc(db, "public_profiles", uid));
+  if (!profileSnap.exists()) return null;
+
+  return {
+    uid,
+    email: normalizedEmail,
+    ...profileSnap.data(),
+  } as UserProfile;
 }
 
 /** Save a wrapped (vault-encrypted) private key to Firestore for multi-device sync. */
@@ -94,8 +116,7 @@ export async function getWrappedPrivateKey(
   const snap = await getDoc(ref);
 
   if (!snap.exists()) return null;
-  const data = snap.data() as Omit<UserProfile, "uid">;
-  return data.wrappedPrivateKey || null;
+  return snap.data().wrappedPrivateKey || null;
 }
 
 /** Update the public key in a user's profile. */
@@ -103,5 +124,5 @@ export async function updatePublicKey(
   uid: string,
   publicKeyJwk: string
 ): Promise<void> {
-  await updateDoc(doc(db, "users", uid), { publicKey: publicKeyJwk });
+  await updateDoc(doc(db, "public_profiles", uid), { publicKey: publicKeyJwk });
 }

@@ -12,6 +12,7 @@ import {
   where,
   getDocs,
   onSnapshot,
+  writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
@@ -111,16 +112,14 @@ export async function acceptRequest(
   senderId: string,
   receiverId: string
 ): Promise<void> {
-  // Update request status
-  await updateDoc(doc(db, "friend_requests", requestId), {
-    status: "accepted",
-  });
-
-  // Create a friends document
-  await addDoc(collection(db, "friends"), {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "friend_requests", requestId), { status: "accepted" });
+  batch.set(doc(db, "friends", [senderId, receiverId].sort().join("_")), {
     users: [senderId, receiverId],
+    requestId,
     createdAt: Date.now(),
   });
+  await batch.commit();
 }
 
 /** Reject a friend request. */
@@ -148,7 +147,7 @@ export async function getFriends(
     if (!friendUid) continue;
 
     // Fetch friend's profile
-    const profileRef = doc(db, "users", friendUid);
+    const profileRef = doc(db, "public_profiles", friendUid);
     const { getDoc } = await import("firebase/firestore");
     const profileSnap = await getDoc(profileRef);
 
@@ -156,6 +155,7 @@ export async function getFriends(
       friends.push({
         uid: profileSnap.id,
         friendDocId: d.id,
+        email: "",
         ...profileSnap.data(),
       } as UserProfile & { friendDocId: string });
     }

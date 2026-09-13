@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { type FriendRequest } from "../lib/validations";
 import { Check, X, Clock } from "lucide-react";
+import Image from "next/image";
 
 interface FriendRequestCardProps {
   request: FriendRequest;
@@ -55,7 +56,13 @@ export function FriendRequestCard({
       {/* Avatar */}
       <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
         {displayPhoto ? (
-          <img src={displayPhoto} alt={displayName} className="w-full h-full object-cover rounded-full" />
+          <Image
+            src={displayPhoto}
+            alt={displayName}
+            width={44}
+            height={44}
+            className="w-full h-full object-cover rounded-full"
+          />
         ) : (
           displayName?.charAt(0)?.toUpperCase() || "?"
         )}

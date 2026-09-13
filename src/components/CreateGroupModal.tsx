@@ -43,8 +43,8 @@ export function CreateGroupModal({ isOpen, onClose, notes, userId }: CreateGroup
       groupSchema.parse({ title, color });
       await createGroup(userId, title.trim(), color, selectedNoteIds);
       handleClose();
-    } catch (err: any) {
-      setError(err.errors?.[0]?.message || err.message || "Failed to create group");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create group");
     } finally {
       setSaving(false);
     }

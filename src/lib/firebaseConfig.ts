@@ -1,6 +1,13 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -21,10 +28,18 @@ let googleProvider: GoogleAuthProvider;
 
 if (hasValidConfig) {
   // Initialize Firebase only if we have the config and it's not already initialized
-  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  const appAlreadyExists = getApps().length > 0;
+  app = appAlreadyExists ? getApp() : initializeApp(firebaseConfig);
 
   auth = getAuth(app);
-  db = getFirestore(app);
+  db =
+    typeof window !== "undefined" && !appAlreadyExists
+      ? initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        })
+      : getFirestore(app);
   googleProvider = new GoogleAuthProvider();
 
   // Enable persistent session management (can also use indexedDBLocalPersistence)
@@ -32,6 +47,14 @@ if (hasValidConfig) {
     setPersistence(auth, browserLocalPersistence).catch((error) => {
       console.error("Auth persistence error:", error);
     });
+
+    const appCheckSiteKey = process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY;
+    if (appCheckSiteKey && !appAlreadyExists) {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+    }
   }
 } else {
   // Provide stubs so that the app can compile and render without Firebase credentials.
@@ -44,7 +67,10 @@ if (hasValidConfig) {
   auth = new Proxy({} as Auth, {
     get(_, prop) {
       if (prop === "currentUser") return null;
-      if (prop === "onAuthStateChanged") return (_cb: unknown) => () => {};
+      if (prop === "onAuthStateChanged") return (callback: unknown) => {
+        void callback;
+        return () => {};
+      };
       return undefined;
     },
   });

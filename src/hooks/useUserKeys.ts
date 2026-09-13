@@ -22,6 +22,9 @@ import {
   storePrivateKey,
   wrapPrivateKey,
   unwrapPrivateKey,
+  importPublicKey,
+  exportPublicKeyFromPrivateKey,
+  keyPairMatches,
 } from "../lib/services/crypto/keys";
 import {
   getOrCreateUserProfile,
@@ -54,8 +57,12 @@ export function useUserKeys(): UseUserKeysReturn {
 
   useEffect(() => {
     if (!user || !hasValidConfig) {
-      setIsReady(false);
-      setHasKeys(false);
+      queueMicrotask(() => {
+        setIsReady(false);
+        setHasKeys(false);
+        setPrivateKey(null);
+        setPublicKey(null);
+      });
       return;
     }
 
@@ -67,16 +74,22 @@ export function useUserKeys(): UseUserKeysReturn {
         const localKey = await loadPrivateKey(user!.uid);
 
         if (localKey && !cancelled) {
-          setPrivateKey(localKey);
-          setHasKeys(true);
-
-          // Ensure profile exists and fetch public key
+          // Ensure the stored public key still belongs to this private key.
           const profile = await getOrCreateUserProfile(user!);
           if (profile.publicKey && !cancelled) {
-            const { importPublicKey } = await import("../lib/services/crypto/keys");
             const pubKey = await importPublicKey(profile.publicKey);
+            if (!(await keyPairMatches(pubKey, localKey))) {
+              throw new Error("Your local encryption key does not match your account public key");
+            }
             setPublicKey(pubKey);
+          } else if (!cancelled) {
+            const publicKeyJwk = await exportPublicKeyFromPrivateKey(localKey);
+            await updatePublicKey(user!.uid, publicKeyJwk);
+            setPublicKey(await importPublicKey(publicKeyJwk));
           }
+
+          setPrivateKey(localKey);
+          setHasKeys(true);
 
           // Check if vault backup exists — if not, prompt setup
           const wrappedKey = await getWrappedPrivateKey(user!.uid);
@@ -89,12 +102,21 @@ export function useUserKeys(): UseUserKeysReturn {
         }
 
         // Step 2: No local key — check Firestore for vault backup
+        const profile = await getOrCreateUserProfile(user!);
         const wrappedKey = await getWrappedPrivateKey(user!.uid);
 
         if (wrappedKey && !cancelled) {
           // Need vault password to unwrap
           setNeedsVaultPassword(true);
           setIsReady(true); // Ready but keys not available until unlocked
+          return;
+        }
+
+        if (profile.publicKey && !cancelled) {
+          setError(
+            "Your account has an encryption identity, but its private key is unavailable on this device. Import a key backup instead of generating a replacement."
+          );
+          setIsReady(true);
           return;
         }
 
@@ -106,8 +128,8 @@ export function useUserKeys(): UseUserKeysReturn {
           // Store private key locally
           await storePrivateKey(user!.uid, keyPair.privateKey);
 
-          // Store public key in Firestore
-          await getOrCreateUserProfile(user!, pubKeyJwk);
+          // The profile was created above; publish the matching public key.
+          await updatePublicKey(user!.uid, pubKeyJwk);
 
           setPublicKey(keyPair.publicKey);
           setPrivateKey(keyPair.privateKey);
@@ -118,7 +140,10 @@ export function useUserKeys(): UseUserKeysReturn {
       } catch (err) {
         if (!cancelled) {
           console.error("Key initialization error:", err);
-          setError("Failed to initialize encryption keys");
+          setPrivateKey(null);
+          setPublicKey(null);
+          setHasKeys(false);
+          setError(err instanceof Error ? err.message : "Failed to initialize encryption keys");
           setIsReady(true);
         }
       }
@@ -165,8 +190,10 @@ export function useUserKeys(): UseUserKeysReturn {
       // Also load the public key
       const profile = await getOrCreateUserProfile(user);
       if (profile.publicKey) {
-        const { importPublicKey } = await import("../lib/services/crypto/keys");
         const pubKey = await importPublicKey(profile.publicKey);
+        if (!(await keyPairMatches(pubKey, unwrapped))) {
+          throw new Error("Vault key does not match the account public key");
+        }
         setPublicKey(pubKey);
       }
     } catch (err) {

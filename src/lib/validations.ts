@@ -3,6 +3,7 @@ import { z } from "zod";
 // ── Note Modes ────────────────────────────────────────────────────────────────
 
 export type NoteMode = "normal" | "secure" | "collab";
+export type CollabRole = "owner" | "editor" | "viewer";
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -60,7 +61,11 @@ export interface SecureNote extends BaseNote {
 export interface CollabNote extends BaseNote {
   mode: "collab";
   title: string;
+  encryptedTitle?: string;
+  titleIv?: string;
   collaboratorIds: string[];
+  /** Authorization role for each collaborator. The author is always the owner. */
+  collaboratorRoles?: Record<string, Exclude<CollabRole, "owner">>;
   /** Map of userId → RSA-wrapped AES key (base64) */
   encryptedKeys: Record<string, string>;
   /** Encrypted Yjs state snapshot (base64) */
@@ -185,6 +190,7 @@ export interface NoteUpdate {
   id: string;
   noteId: string;
   senderId: string;
+  clientId?: string;
   encryptedUpdate: string;
   iv: string;
   createdAt: number;

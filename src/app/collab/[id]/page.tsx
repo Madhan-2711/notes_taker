@@ -10,7 +10,7 @@ import { sendCollabInvite } from "../../../lib/services/social/collaborationServ
 import { decryptKeyFromUser } from "../../../lib/services/crypto/sharing";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebaseConfig";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -27,6 +27,24 @@ export default function CollabNotePage() {
   } = useUserKeys();
 
   const [showCollabManager, setShowCollabManager] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+
+  useEffect(() => {
+    if (!user || !noteId) return;
+    let cancelled = false;
+
+    getDoc(doc(db, "notes", noteId))
+      .then((snapshot) => {
+        if (!cancelled) setIsOwner(snapshot.exists() && snapshot.data().authorId === user.uid);
+      })
+      .catch(() => {
+        if (!cancelled) setIsOwner(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [noteId, user]);
 
   const handleInvite = useCallback(
     async (friendUid: string, friendName: string, permission: "viewer" | "editor") => {
@@ -105,18 +123,20 @@ export default function CollabNotePage() {
         noteId={noteId}
         userId={user.uid}
         privateKey={privateKey}
-        onShare={() => setShowCollabManager(true)}
+        onShare={isOwner ? () => setShowCollabManager(true) : undefined}
         displayName={user.displayName || "Anonymous"}
         photoURL={user.photoURL}
       />
 
-      <CollaboratorManager
-        noteId={noteId}
-        userId={user.uid}
-        isOpen={showCollabManager}
-        onClose={() => setShowCollabManager(false)}
-        onInvite={handleInvite}
-      />
+      {isOwner && (
+        <CollaboratorManager
+          noteId={noteId}
+          userId={user.uid}
+          isOpen={showCollabManager}
+          onClose={() => setShowCollabManager(false)}
+          onInvite={handleInvite}
+        />
+      )}
     </>
   );
 }

@@ -39,14 +39,14 @@ export default function NotesPage() {
 
   // Subscribe to notes via service
   useEffect(() => {
-    if (!user || !hasValidConfig) { setNotes([]); return; }
+    if (!user || !hasValidConfig) return;
     const unsub = subscribeToNotes(user.uid, (data) => setNotes(data));
     return () => unsub();
   }, [user]);
 
   // Subscribe to groups
   useEffect(() => {
-    if (!user || !hasValidConfig) { setGroups([]); return; }
+    if (!user || !hasValidConfig) return;
     const q = query(collection(db, "groups"), where("authorId", "==", user.uid));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Group[];

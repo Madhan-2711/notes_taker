@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
 import { hasValidConfig } from "../../lib/firebaseConfig";
@@ -50,15 +50,18 @@ export default function FriendsPage() {
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[]>([]);
   const [collabInvites, setCollabInvites] = useState<CollabInvite[]>([]);
-  const [showKeySetup, setShowKeySetup] = useState(false);
+  const [vaultSetupDismissed, setVaultSetupDismissed] = useState(false);
   const [showKeyExport, setShowKeyExport] = useState(false);
 
-  // Show key setup modal when prompted
-  useEffect(() => {
-    if (needsVaultSetup) {
-      setShowKeySetup(true);
-    }
-  }, [needsVaultSetup]);
+  const loadData = useCallback(async () => {
+    if (!user) return;
+    const [sent, friendsList] = await Promise.all([
+      getSentRequests(user.uid),
+      getFriends(user.uid),
+    ]);
+    setSentRequests(sent);
+    setFriends(friendsList);
+  }, [user]);
 
   // Subscribe to incoming pending friend requests
   useEffect(() => {
@@ -77,18 +80,18 @@ export default function FriendsPage() {
   // Fetch sent requests and friends (re-fetch on user change)
   useEffect(() => {
     if (!user || !hasValidConfig) return;
-    loadData();
+    let cancelled = false;
+    Promise.all([getSentRequests(user.uid), getFriends(user.uid)]).then(
+      ([sent, friendsList]) => {
+        if (cancelled) return;
+        setSentRequests(sent);
+        setFriends(friendsList);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
-
-  const loadData = async () => {
-    if (!user) return;
-    const [sent, friendsList] = await Promise.all([
-      getSentRequests(user.uid),
-      getFriends(user.uid),
-    ]);
-    setSentRequests(sent);
-    setFriends(friendsList);
-  };
 
   const handleSendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,7 +309,7 @@ export default function FriendsPage() {
               </span>
               {needsVaultSetup && (
                 <button
-                  onClick={() => setShowKeySetup(true)}
+                  onClick={() => setVaultSetupDismissed(false)}
                   className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition-colors shrink-0"
                 >
                   Set Password
@@ -431,8 +434,8 @@ export default function FriendsPage() {
 
       {/* Key Setup Modal */}
       <KeySetupModal
-        isOpen={showKeySetup}
-        onClose={() => setShowKeySetup(false)}
+        isOpen={needsVaultSetup && !vaultSetupDismissed}
+        onClose={() => setVaultSetupDismissed(true)}
         onSetPassword={setVaultPassword}
       />
 

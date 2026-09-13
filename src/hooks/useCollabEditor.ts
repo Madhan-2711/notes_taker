@@ -20,6 +20,7 @@ import {
   where,
   onSnapshot,
   writeBatch,
+  serverTimestamp,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../lib/firebaseConfig";
@@ -34,6 +35,8 @@ interface UseCollabEditorReturn {
   isLoading: boolean;
   isSynced: boolean;
   error: string | null;
+  canEdit: boolean;
+  canCompact: boolean;
   /** Manually save the current state as an encrypted snapshot. */
   saveSnapshot: () => Promise<void>;
 }
@@ -51,6 +54,9 @@ export function useCollabEditor(
   const [isLoading, setIsLoading] = useState(true);
   const [isSynced, setIsSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
+  const [canCompact, setCanCompact] = useState(false);
+  const [clientId] = useState(() => crypto.randomUUID());
 
   const ydocRef = useRef<Y.Doc | null>(null);
   const noteKeyRef = useRef<CryptoKey | null>(null);
@@ -58,6 +64,8 @@ export function useCollabEditor(
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isApplyingRemoteRef = useRef(false);
   const processedUpdateIdsRef = useRef(new Set<string>());
+  const pendingUpdatesRef = useRef<Uint8Array[]>([]);
+  const publishingRef = useRef(false);
 
   // Initialize: load the note and set up Yjs
   useEffect(() => {
@@ -65,13 +73,14 @@ export function useCollabEditor(
 
     let cancelled = false;
     let unsubUpdates: Unsubscribe | null = null;
+    const processedUpdateIds = processedUpdateIdsRef.current;
 
     async function init() {
       try {
         setIsLoading(true);
         setError(null);
 
-        const { ydoc, noteKey, title: noteTitle } = await loadCollabNote(
+        const { ydoc, noteKey, title: noteTitle, role } = await loadCollabNote(
           noteId,
           userId,
           privateKey!
@@ -85,48 +94,75 @@ export function useCollabEditor(
         ydocRef.current = ydoc;
         noteKeyRef.current = noteKey;
         setTitle(noteTitle);
+        setCanEdit(role === "owner" || role === "editor");
+        setCanCompact(role === "owner");
 
         const ytext = ydoc.getText("content");
         setText(ytext);
 
-        // Listen for local changes and publish them
-        ydoc.on("update", (_update: Uint8Array, origin: string) => {
-          if (origin === "remote" || isApplyingRemoteRef.current) return;
+        const scheduleFlush = (delay = DEBOUNCE_MS) => {
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = setTimeout(flushPendingUpdates, delay);
+        };
 
-          // Debounce: batch local changes before encrypting & publishing
-          if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
+        const flushPendingUpdates = async () => {
+          if (publishingRef.current) {
+            scheduleFlush(50);
+            return;
           }
 
-          debounceTimerRef.current = setTimeout(async () => {
-            try {
-              // Always send full state — debounce may skip intermediate deltas
-              const fullUpdate = Y.encodeStateAsUpdate(ydoc);
-              const base64 = arrayBufferToBase64(fullUpdate.buffer);
-              const encrypted = await encryptData(base64, noteKey);
+          const pending = pendingUpdatesRef.current.splice(0);
+          if (pending.length === 0) return;
+          publishingRef.current = true;
 
-              await addDoc(collection(db, "note_updates"), {
-                noteId,
-                senderId: userId,
-                encryptedUpdate: encrypted.ciphertext,
-                iv: encrypted.iv,
-                createdAt: Date.now(),
-              });
+          try {
+            const mergedUpdate = Y.mergeUpdates(pending);
+            const base64 = arrayBufferToBase64(mergedUpdate.buffer);
+            const encrypted = await encryptData(base64, noteKey);
 
-              updateCountRef.current++;
+            const updateRef = await addDoc(collection(db, "note_updates"), {
+              noteId,
+              senderId: userId,
+              clientId,
+              encryptedUpdate: encrypted.ciphertext,
+              iv: encrypted.iv,
+              createdAt: serverTimestamp(),
+            });
 
-              // Compaction: save full snapshot every N updates
-              if (updateCountRef.current >= COMPACTION_THRESHOLD) {
-                await compactSnapshot(noteId, ydoc, noteKey);
+            processedUpdateIdsRef.current.add(updateRef.id);
+            updateCountRef.current++;
+
+            if (role === "owner" && updateCountRef.current >= COMPACTION_THRESHOLD) {
+              const includedIds = Array.from(processedUpdateIdsRef.current);
+              try {
+                await compactSnapshot(noteId, ydoc, noteKey, includedIds);
+                includedIds.forEach((id) => processedUpdateIdsRef.current.delete(id));
                 updateCountRef.current = 0;
+              } catch (checkpointError) {
+                // The update itself is already durable. Keep the threshold reached
+                // so a later edit or manual checkpoint retries compaction.
+                console.error("Snapshot checkpoint failed:", checkpointError);
               }
-
-              setIsSynced(true);
-            } catch (err) {
-              console.error("Failed to publish update:", err);
-              setIsSynced(false);
             }
-          }, DEBOUNCE_MS);
+
+            setIsSynced(pendingUpdatesRef.current.length === 0);
+          } catch (err) {
+            pendingUpdatesRef.current.unshift(...pending);
+            console.error("Failed to publish update:", err);
+            setIsSynced(false);
+            scheduleFlush(1_000);
+          } finally {
+            publishingRef.current = false;
+            if (pendingUpdatesRef.current.length > 0) scheduleFlush(0);
+          }
+        };
+
+        // Listen for local changes and publish incremental Yjs updates.
+        ydoc.on("update", (update: Uint8Array, origin: string) => {
+          if (origin === "remote" || isApplyingRemoteRef.current) return;
+          pendingUpdatesRef.current.push(new Uint8Array(update));
+          setIsSynced(false);
+          scheduleFlush();
         });
 
         // Subscribe to remote updates.
@@ -145,11 +181,10 @@ export function useCollabEditor(
 
               const updateData = change.doc.data();
 
-              // Skip own updates and already-processed updates
-              if (updateData.senderId === userId) continue;
+              // Only skip this browser tab's own updates. Other tabs and devices
+              // for the same Firebase user must still receive each other's work.
+              if (updateData.clientId === clientId) continue;
               if (processedUpdateIdsRef.current.has(change.doc.id)) continue;
-
-              processedUpdateIdsRef.current.add(change.doc.id);
 
               try {
                 const decryptedBase64 = await decryptData(
@@ -162,6 +197,7 @@ export function useCollabEditor(
                 isApplyingRemoteRef.current = true;
                 Y.applyUpdate(ydoc, updateBytes, "remote");
                 isApplyingRemoteRef.current = false;
+                processedUpdateIdsRef.current.add(change.doc.id);
 
                 setIsSynced(true);
               } catch (err) {
@@ -197,61 +233,57 @@ export function useCollabEditor(
       if (ydocRef.current) ydocRef.current.destroy();
       ydocRef.current = null;
       noteKeyRef.current = null;
-      processedUpdateIdsRef.current.clear();
+      processedUpdateIds.clear();
+      pendingUpdatesRef.current = [];
+      publishingRef.current = false;
     };
-  }, [noteId, userId, privateKey]);
+  }, [noteId, userId, privateKey, clientId]);
 
   /** Manually save the current Yjs state as an encrypted snapshot to Firestore. */
   const saveSnapshot = useCallback(async () => {
     const ydoc = ydocRef.current;
     const noteKey = noteKeyRef.current;
-    if (!ydoc || !noteKey) return;
+    if (!ydoc || !noteKey || !canCompact) return;
 
     try {
-      await compactSnapshot(noteId, ydoc, noteKey);
+      const includedIds = Array.from(processedUpdateIdsRef.current);
+      await compactSnapshot(noteId, ydoc, noteKey, includedIds);
+      includedIds.forEach((id) => processedUpdateIdsRef.current.delete(id));
       updateCountRef.current = 0;
       setIsSynced(true);
     } catch (err) {
       console.error("Manual snapshot save failed:", err);
     }
-  }, [noteId]);
+  }, [noteId, canCompact]);
 
-  return { text, title, isLoading, isSynced, error, saveSnapshot };
+  return { text, title, isLoading, isSynced, error, canEdit, canCompact, saveSnapshot };
 }
 
 /** Save a full encrypted snapshot and clean up processed updates. */
 async function compactSnapshot(
   noteId: string,
   ydoc: Y.Doc,
-  noteKey: CryptoKey
+  noteKey: CryptoKey,
+  includedUpdateIds: string[]
 ): Promise<void> {
-  try {
-    const fullState = Y.encodeStateAsUpdate(ydoc);
-    const base64 = arrayBufferToBase64(fullState.buffer);
-    const encrypted = await encryptData(base64, noteKey);
+  const fullState = Y.encodeStateAsUpdate(ydoc);
+  const base64 = arrayBufferToBase64(fullState.buffer);
+  const encrypted = await encryptData(base64, noteKey);
 
     // Update the note's snapshot
-    await updateDoc(doc(db, "notes", noteId), {
-      latestSnapshot: encrypted.ciphertext,
-      snapshotIv: encrypted.iv,
-      updatedAt: Date.now(),
-    });
+  await updateDoc(doc(db, "notes", noteId), {
+    latestSnapshot: encrypted.ciphertext,
+    snapshotIv: encrypted.iv,
+    updatedAt: Date.now(),
+  });
 
-    // Delete processed note_updates (keep last few for late-joining clients)
-    const updatesQuery = query(
-      collection(db, "note_updates"),
-      where("noteId", "==", noteId)
-    );
-    const { getDocs } = await import("firebase/firestore");
-    const snap = await getDocs(updatesQuery);
-
-    if (snap.docs.length > 5) {
-      const toDelete = snap.docs.slice(0, snap.docs.length - 5);
-      const batch = writeBatch(db);
-      toDelete.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
+  // Delete only update IDs known to be represented by this exact snapshot.
+  // Concurrent updates that arrive after encoding are not in this list and survive.
+  for (let offset = 0; offset < includedUpdateIds.length; offset += 400) {
+    const batch = writeBatch(db);
+    for (const updateId of includedUpdateIds.slice(offset, offset + 400)) {
+      batch.delete(doc(db, "note_updates", updateId));
     }
-  } catch (err) {
-    console.error("Snapshot compaction failed:", err);
+    await batch.commit();
   }
 }

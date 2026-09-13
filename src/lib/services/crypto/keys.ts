@@ -4,7 +4,7 @@
  * - RSA-OAEP 4096-bit keys for wrapping/unwrapping per-note AES keys
  * - AES-256-GCM keys for note encryption
  * - IndexedDB (via idb-keyval) for local private key storage
- * - PBKDF2 → AES-KW for vault password wrapping (multi-device sync)
+ * - PBKDF2 → AES-GCM for authenticated vault backup encryption
  */
 
 import { get, set, del } from "idb-keyval";
@@ -46,6 +46,36 @@ export async function generateRSAKeyPair(): Promise<{
 export async function exportPublicKey(key: CryptoKey): Promise<string> {
   const jwk = await crypto.subtle.exportKey("jwk", key);
   return JSON.stringify(jwk);
+}
+
+/** Reconstruct the public JWK fields carried by an RSA private key. */
+export async function exportPublicKeyFromPrivateKey(
+  privateKey: CryptoKey
+): Promise<string> {
+  const privateJwk = await crypto.subtle.exportKey("jwk", privateKey);
+  if (!privateJwk.n || !privateJwk.e) throw new Error("Invalid RSA private key");
+
+  const publicJwk: JsonWebKey = {
+    kty: "RSA",
+    n: privateJwk.n,
+    e: privateJwk.e,
+    alg: "RSA-OAEP-256",
+    ext: true,
+    key_ops: ["wrapKey"],
+  };
+  return JSON.stringify(publicJwk);
+}
+
+/** Verify that a public key and private key belong to the same RSA pair. */
+export async function keyPairMatches(
+  publicKey: CryptoKey,
+  privateKey: CryptoKey
+): Promise<boolean> {
+  const [publicJwk, privateJwk] = await Promise.all([
+    crypto.subtle.exportKey("jwk", publicKey),
+    crypto.subtle.exportKey("jwk", privateKey),
+  ]);
+  return publicJwk.n === privateJwk.n && publicJwk.e === privateJwk.e;
 }
 
 /** Import an RSA public key from a base64-encoded JWK from Firestore. */
@@ -106,18 +136,16 @@ export async function clearPrivateKey(uid: string): Promise<void> {
 
 /**
  * Derive an AES-GCM key from a vault password using PBKDF2.
- * Uses a deterministic salt derived from the password itself.
+ * Version 2 vaults use a random salt stored with the encrypted payload.
  */
-async function deriveWrappingKey(password: string): Promise<{
-  wrappingKey: CryptoKey;
-  salt: Uint8Array;
-}> {
+const VAULT_ITERATIONS = 600_000;
+
+async function deriveWrappingKey(
+  password: string,
+  salt: ArrayBuffer
+): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const passwordBuffer = encoder.encode(password);
-
-  // Use PBKDF2 with a deterministic salt (SHA-256 of password)
-  const saltSource = await crypto.subtle.digest("SHA-256", passwordBuffer);
-  const salt = new Uint8Array(saltSource).slice(0, 16);
 
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -131,7 +159,7 @@ async function deriveWrappingKey(password: string): Promise<{
     {
       name: "PBKDF2",
       salt,
-      iterations: 600000, // OWASP recommended minimum for PBKDF2-SHA-256
+      iterations: VAULT_ITERATIONS,
       hash: "SHA-256",
     },
     keyMaterial,
@@ -140,20 +168,31 @@ async function deriveWrappingKey(password: string): Promise<{
     ["encrypt", "decrypt"]
   );
 
-  return { wrappingKey, salt };
+  return wrappingKey;
+}
+
+interface VaultEnvelopeV2 {
+  version: 2;
+  kdf: "PBKDF2-SHA256";
+  iterations: number;
+  salt: string;
+  cipher: "AES-256-GCM";
+  iv: string;
+  ciphertext: string;
 }
 
 /**
  * Wrap a private key with a vault password for backup.
  * Exports the private key as JWK, then encrypts with AES-GCM
  * using a PBKDF2-derived key from the password.
- * Returns a base64-encoded string containing: [4-byte IV length][IV][ciphertext]
+ * Returns a versioned JSON envelope containing the random salt, IV and ciphertext.
  */
 export async function wrapPrivateKey(
   privateKey: CryptoKey,
   password: string
 ): Promise<string> {
-  const { wrappingKey } = await deriveWrappingKey(password);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const wrappingKey = await deriveWrappingKey(password, salt.buffer);
 
   // Export the private key as JWK and encode to bytes
   const jwk = await crypto.subtle.exportKey("jwk", privateKey);
@@ -169,16 +208,17 @@ export async function wrapPrivateKey(
     jwkBytes
   );
 
-  // Combine: [4-byte IV length][IV][ciphertext]
-  const ivLenBuf = new Uint8Array(4);
-  new DataView(ivLenBuf.buffer).setUint32(0, iv.length);
+  const envelope: VaultEnvelopeV2 = {
+    version: 2,
+    kdf: "PBKDF2-SHA256",
+    iterations: VAULT_ITERATIONS,
+    salt: arrayBufferToBase64(salt.buffer),
+    cipher: "AES-256-GCM",
+    iv: arrayBufferToBase64(iv.buffer),
+    ciphertext: arrayBufferToBase64(encrypted),
+  };
 
-  const combined = new Uint8Array(4 + iv.length + encrypted.byteLength);
-  combined.set(ivLenBuf, 0);
-  combined.set(iv, 4);
-  combined.set(new Uint8Array(encrypted), 4 + iv.length);
-
-  return arrayBufferToBase64(combined.buffer);
+  return JSON.stringify(envelope);
 }
 
 /**
@@ -190,12 +230,50 @@ export async function unwrapPrivateKey(
   wrapped: string,
   password: string
 ): Promise<CryptoKey> {
-  const { wrappingKey } = await deriveWrappingKey(password);
+  if (wrapped.trimStart().startsWith("{")) {
+    const envelope = JSON.parse(wrapped) as Partial<VaultEnvelopeV2>;
+    if (
+      envelope.version !== 2 ||
+      envelope.kdf !== "PBKDF2-SHA256" ||
+      envelope.cipher !== "AES-256-GCM" ||
+      envelope.iterations !== VAULT_ITERATIONS ||
+      !envelope.salt ||
+      !envelope.iv ||
+      !envelope.ciphertext
+    ) {
+      throw new Error("Unsupported vault backup format");
+    }
+
+    const salt = new Uint8Array(base64ToArrayBuffer(envelope.salt));
+    const iv = new Uint8Array(base64ToArrayBuffer(envelope.iv));
+    if (salt.byteLength !== 16 || iv.byteLength !== 12) {
+      throw new Error("Invalid vault backup parameters");
+    }
+
+    const wrappingKey = await deriveWrappingKey(password, salt.buffer);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      wrappingKey,
+      base64ToArrayBuffer(envelope.ciphertext)
+    );
+
+    return importPrivateKey(new TextDecoder().decode(decrypted));
+  }
+
+  // Version 1 compatibility: the original format derived its salt from the
+  // password and stored [IV length][IV][ciphertext] as one base64 string.
+  const passwordBuffer = new TextEncoder().encode(password);
+  const saltSource = await crypto.subtle.digest("SHA-256", passwordBuffer);
+  const legacySalt = new Uint8Array(saltSource).slice(0, 16);
+  const wrappingKey = await deriveWrappingKey(password, legacySalt.buffer);
 
   const combined = new Uint8Array(base64ToArrayBuffer(wrapped));
 
   // Parse: [4-byte IV length][IV][ciphertext]
   const ivLength = new DataView(combined.buffer).getUint32(0);
+  if (ivLength !== 12 || combined.byteLength <= 4 + ivLength) {
+    throw new Error("Invalid legacy vault backup");
+  }
   const iv = combined.slice(4, 4 + ivLength);
   const ciphertext = combined.slice(4 + ivLength);
 
@@ -211,4 +289,3 @@ export async function unwrapPrivateKey(
 
   return importPrivateKey(jwkString);
 }
-

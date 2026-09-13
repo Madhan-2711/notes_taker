@@ -38,14 +38,7 @@ export default function WritePage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [showKeySetup, setShowKeySetup] = useState(false);
-
-  // Show key setup modal when prompted
-  useEffect(() => {
-    if (needsVaultSetup) {
-      setShowKeySetup(true);
-    }
-  }, [needsVaultSetup]);
+  const [vaultSetupDismissed, setVaultSetupDismissed] = useState(false);
 
   // Live-subscribe to user's groups for the multi-select
   useEffect(() => {
@@ -267,8 +260,8 @@ export default function WritePage() {
 
       {/* Vault modals */}
       <KeySetupModal
-        isOpen={showKeySetup}
-        onClose={() => setShowKeySetup(false)}
+        isOpen={needsVaultSetup && !vaultSetupDismissed}
+        onClose={() => setVaultSetupDismissed(true)}
         onSetPassword={setVaultPassword}
       />
 

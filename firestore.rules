@@ -1,145 +1,363 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    // ── NOTES ────────────────────────────────────────────────────
-    // Extended: collaborators can now read and (if editor) update
+    function notePath(noteId) {
+      return /databases/$(database)/documents/notes/$(noteId);
+    }
+
+    function invitePath(noteId, uid) {
+      return /databases/$(database)/documents/collab_invites/$(noteId + "_" + uid);
+    }
+
+    function isOwner(note) {
+      return signedIn() && note.data.authorId == request.auth.uid;
+    }
+
+    function isCollaborator(note) {
+      return signedIn()
+        && ('collaboratorIds' in note.data)
+        && request.auth.uid in note.data.collaboratorIds;
+    }
+
+    function collaboratorCanEdit(note) {
+      return isCollaborator(note)
+        && (
+          !('collaboratorRoles' in note.data)
+          || !(request.auth.uid in note.data.collaboratorRoles)
+          || note.data.collaboratorRoles[request.auth.uid] == "editor"
+        );
+    }
+
+    function validBaseNote(data) {
+      return data.authorId is string
+        && data.mode in ["normal", "secure", "collab"]
+        && data.groupIds is list
+        && data.groupIds.size() <= 50
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function validNoteCreate(data) {
+      return validBaseNote(data)
+        && data.keys().hasOnly([
+          "mode", "title", "content", "encryptedTitle", "encryptedContent",
+          "iv", "authorId", "groupIds", "createdAt", "updatedAt",
+          "collaboratorIds", "collaboratorRoles", "encryptedKeys",
+          "latestSnapshot", "snapshotIv", "titleIv"
+        ])
+        && (
+          (data.mode == "normal"
+            && data.keys().hasAll(["title", "content"])
+            && data.title is string && data.title.size() <= 100
+            && data.content is string && data.content.size() <= 5000)
+          ||
+          (data.mode == "secure"
+            && data.keys().hasAll(["encryptedTitle", "encryptedContent", "iv", "encryptedKeys"])
+            && data.encryptedTitle is string && data.encryptedTitle.size() <= 20000
+            && data.encryptedContent is string && data.encryptedContent.size() <= 500000
+            && data.iv is string && data.iv.size() <= 1000
+            && data.encryptedKeys is map
+            && data.authorId in data.encryptedKeys)
+          ||
+          (data.mode == "collab"
+            && data.keys().hasAll([
+              "title", "collaboratorIds", "collaboratorRoles", "encryptedKeys",
+              "latestSnapshot", "snapshotIv", "encryptedTitle", "titleIv"
+            ])
+            && data.title is string && data.title.size() <= 100
+            && data.encryptedTitle is string && data.encryptedTitle.size() <= 20000
+            && data.titleIv is string && data.titleIv.size() <= 100
+            && data.collaboratorIds is list && data.collaboratorIds.size() == 0
+            && data.collaboratorRoles is map
+            && data.encryptedKeys is map
+            && data.authorId in data.encryptedKeys
+            && data.latestSnapshot is string && data.latestSnapshot.size() <= 700000
+            && data.snapshotIv is string && data.snapshotIv.size() <= 100)
+        );
+    }
+
+    function validMutableNote(data) {
+      return (
+          ((!('mode' in data) || data.mode == "normal")
+            && data.title is string && data.title.size() <= 100
+            && data.content is string && data.content.size() <= 5000)
+          ||
+          (data.mode == "secure"
+            && data.encryptedTitle is string && data.encryptedTitle.size() <= 20000
+            && data.encryptedContent is string && data.encryptedContent.size() <= 500000
+            && data.iv is string && data.iv.size() <= 1000
+            && data.encryptedKeys is map)
+          ||
+          (data.mode == "collab"
+            && data.title is string && data.title.size() <= 100
+            && (!('encryptedTitle' in data)
+              || (data.encryptedTitle is string && data.encryptedTitle.size() <= 20000))
+            && (!('titleIv' in data)
+              || (data.titleIv is string && data.titleIv.size() <= 100))
+            && data.collaboratorIds is list && data.collaboratorIds.size() <= 100
+            && data.collaboratorRoles is map
+            && data.encryptedKeys is map
+            && data.latestSnapshot is string && data.latestSnapshot.size() <= 700000
+            && data.snapshotIv is string && data.snapshotIv.size() <= 100)
+        )
+        && (!('groupIds' in data)
+          || (data.groupIds is list && data.groupIds.size() <= 50))
+        && data.updatedAt is number;
+    }
+
+    function validInviteAcceptance(noteId) {
+      let invite = get(invitePath(noteId, request.auth.uid));
+      let acceptedInvite = getAfter(invitePath(noteId, request.auth.uid));
+      return invite.data.noteId == noteId
+        && invite.data.senderId == resource.data.authorId
+        && invite.data.receiverId == request.auth.uid
+        && invite.data.status == "pending"
+        && acceptedInvite.data.status == "accepted"
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["collaboratorIds", "collaboratorRoles", "encryptedKeys", "updatedAt"])
+        && request.resource.data.collaboratorIds.size() == resource.data.collaboratorIds.size() + 1
+        && request.resource.data.collaboratorIds.hasAll(resource.data.collaboratorIds)
+        && request.auth.uid in request.resource.data.collaboratorIds
+        && !(request.auth.uid in resource.data.collaboratorIds)
+        && request.resource.data.encryptedKeys.diff(resource.data.encryptedKeys)
+          .affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.collaboratorRoles.diff(resource.data.collaboratorRoles)
+          .affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.collaboratorRoles[request.auth.uid] == invite.data.permission;
+    }
+
     match /notes/{noteId} {
-      allow read: if request.auth != null
-        && (request.auth.uid == resource.data.authorId
-            || request.auth.uid in resource.data.collaboratorIds
-            || (
-                 exists(/databases/$(database)/documents/collab_invites/$(noteId + "_" + request.auth.uid))
-                 && get(/databases/$(database)/documents/collab_invites/$(noteId + "_" + request.auth.uid)).data.receiverId == request.auth.uid
-               )
-           );
+      allow read: if isOwner(resource) || isCollaborator(resource);
 
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.authorId;
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.authorId
+        && validNoteCreate(request.resource.data);
 
-      allow update: if request.auth != null
-        && request.resource.data.authorId == resource.data.authorId
-        && (request.auth.uid == resource.data.authorId
-            || request.auth.uid in resource.data.collaboratorIds
-            || (
-                 request.auth.uid in request.resource.data.collaboratorIds
-                 && exists(/databases/$(database)/documents/collab_invites/$(noteId + "_" + request.auth.uid))
-                 && get(/databases/$(database)/documents/collab_invites/$(noteId + "_" + request.auth.uid)).data.status == "pending"
-               )
-           );
+      allow update: if request.resource.data.authorId == resource.data.authorId
+        && ((!('mode' in resource.data) && !('mode' in request.resource.data))
+          || (('mode' in resource.data) && ('mode' in request.resource.data)
+            && request.resource.data.mode == resource.data.mode))
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validMutableNote(request.resource.data)
+        && (
+          (isOwner(resource)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "title", "content", "encryptedTitle", "encryptedContent", "iv",
+              "groupIds", "updatedAt", "collaboratorIds", "collaboratorRoles",
+              "encryptedKeys", "latestSnapshot", "snapshotIv", "titleIv"
+            ]))
+          ||
+          (collaboratorCanEdit(resource)
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["latestSnapshot", "snapshotIv", "updatedAt"]))
+          || validInviteAcceptance(noteId)
+        );
 
-      allow delete: if request.auth != null
-        && request.auth.uid == resource.data.authorId;
+      allow delete: if isOwner(resource);
 
-      // Presence subcollection for live collaboration
       match /presence/{uid} {
-        allow read: if request.auth != null
-          && (request.auth.uid == get(/databases/$(database)/documents/notes/$(noteId)).data.authorId
-              || request.auth.uid in get(/databases/$(database)/documents/notes/$(noteId)).data.collaboratorIds);
-        allow write: if request.auth != null
-          && request.auth.uid == uid;
-        allow delete: if request.auth != null
-          && request.auth.uid == uid;
+        function canAccessParentNote() {
+          let note = get(notePath(noteId));
+          return isOwner(note) || isCollaborator(note);
+        }
+
+        allow read: if canAccessParentNote();
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && canAccessParentNote()
+          && request.resource.data.keys().hasOnly([
+            "uid", "displayName", "photoURL", "lastSeen", "cursorPosition"
+          ])
+          && request.resource.data.uid == uid
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() <= 100
+          && request.resource.data.lastSeen is number;
+        allow delete: if signedIn() && request.auth.uid == uid;
       }
     }
 
-    // ── GROUPS (unchanged) ───────────────────────────────────────
     match /groups/{groupId} {
-      allow read: if request.auth != null
-        && request.auth.uid == resource.data.authorId;
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.authorId;
-      allow update: if request.auth != null
-        && request.auth.uid == resource.data.authorId
-        && request.resource.data.authorId == resource.data.authorId;
-      allow delete: if request.auth != null
-        && request.auth.uid == resource.data.authorId;
+      allow read: if isOwner(resource);
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.authorId
+        && request.resource.data.keys().hasOnly(["title", "color", "authorId", "createdAt"])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 50
+        && request.resource.data.color is string;
+      allow update: if isOwner(resource)
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["title", "color"]);
+      allow delete: if isOwner(resource);
     }
 
-    // ── USERS (NEW) ─────────────────────────────────────────────
-    // Public keys must be readable by any authenticated user
+    // Private account and vault data.
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-        && request.auth.uid == uid;
-      allow update: if request.auth != null
-        && request.auth.uid == uid;
-      allow delete: if request.auth != null
-        && request.auth.uid == uid;
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(["email", "wrappedPrivateKey", "createdAt"])
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["wrappedPrivateKey"]);
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
-    // ── FRIEND REQUESTS (NEW) ───────────────────────────────────
+    // Non-sensitive identity and encryption material, fetched by exact UID.
+    match /public_profiles/{uid} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(["displayName", "photoURL", "publicKey", "createdAt"])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 100
+        && request.resource.data.publicKey is string;
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["displayName", "photoURL", "publicKey"]);
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Exact-address lookup only; collection enumeration is denied.
+    match /email_directory/{email} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update: if signedIn()
+        && email == request.auth.token.email.lower()
+        && request.resource.data.keys().hasOnly(["uid"])
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn()
+        && email == request.auth.token.email.lower()
+        && resource.data.uid == request.auth.uid;
+    }
+
     match /friend_requests/{requestId} {
-      allow read: if request.auth != null
+      allow read: if signedIn()
         && (request.auth.uid == resource.data.senderId
-            || request.auth.uid == resource.data.receiverId);
+          || request.auth.uid == resource.data.receiverId);
 
-      allow create: if request.auth != null
+      allow create: if signedIn()
         && request.auth.uid == request.resource.data.senderId
-        && request.resource.data.status == "pending";
+        && request.resource.data.receiverId != request.auth.uid
+        && exists(/databases/$(database)/documents/public_profiles/$(request.resource.data.receiverId))
+        && request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly([
+          "senderId", "senderEmail", "senderName", "senderPhoto",
+          "receiverId", "receiverEmail", "receiverName", "receiverPhoto",
+          "status", "createdAt"
+        ]);
 
-      // Only receiver can accept/reject
-      allow update: if request.auth != null
+      allow update: if signedIn()
         && request.auth.uid == resource.data.receiverId
-        && request.resource.data.senderId == resource.data.senderId
-        && request.resource.data.receiverId == resource.data.receiverId
+        && resource.data.status == "pending"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
         && request.resource.data.status in ["accepted", "rejected"];
 
-      allow delete: if request.auth != null
+      allow delete: if signedIn()
         && (request.auth.uid == resource.data.senderId
-            || request.auth.uid == resource.data.receiverId);
+          || request.auth.uid == resource.data.receiverId);
     }
 
-    // ── FRIENDS (NEW) ───────────────────────────────────────────
     match /friends/{friendId} {
-      allow read: if request.auth != null
-        && request.auth.uid in resource.data.users;
+      allow read: if signedIn() && request.auth.uid in resource.data.users;
 
-      allow create: if request.auth != null
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(["users", "requestId", "createdAt"])
+        && request.resource.data.users is list
+        && request.resource.data.users.size() == 2
         && request.auth.uid in request.resource.data.users
-        && request.resource.data.users.size() == 2;
+        && getAfter(/databases/$(database)/documents/friend_requests/$(request.resource.data.requestId)).data.status == "accepted"
+        && getAfter(/databases/$(database)/documents/friend_requests/$(request.resource.data.requestId)).data.receiverId == request.auth.uid
+        && request.resource.data.users.hasAll([
+          getAfter(/databases/$(database)/documents/friend_requests/$(request.resource.data.requestId)).data.senderId,
+          request.auth.uid
+        ]);
 
-      allow delete: if request.auth != null
-        && request.auth.uid in resource.data.users;
+      allow delete: if signedIn() && request.auth.uid in resource.data.users;
     }
 
-    // ── COLLAB INVITES (NEW) ────────────────────────────────────
     match /collab_invites/{inviteId} {
-      allow read: if request.auth != null
+      function inviteNote() {
+        return get(notePath(request.resource.data.noteId));
+      }
+
+      allow read: if signedIn()
         && (request.auth.uid == resource.data.senderId
-            || request.auth.uid == resource.data.receiverId);
+          || request.auth.uid == resource.data.receiverId);
 
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.senderId;
+      allow create: if signedIn()
+        && inviteId == request.resource.data.noteId + "_" + request.resource.data.receiverId
+        && request.auth.uid == request.resource.data.senderId
+        && inviteNote().data.authorId == request.auth.uid
+        && request.resource.data.receiverId != request.auth.uid
+        && request.resource.data.permission in ["viewer", "editor"]
+        && request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly([
+          "noteId", "senderId", "senderName", "senderEmail", "receiverId",
+          "receiverName", "encryptedNoteKey", "permission", "status", "createdAt"
+        ]);
 
-      // Receiver can accept/reject; sender can re-invite (overwrite rejected)
-      allow update: if request.auth != null
+      allow update: if signedIn() && (
+        (request.auth.uid == resource.data.receiverId
+          && resource.data.status == "pending"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
+          && request.resource.data.status in ["accepted", "rejected"]
+          && (request.resource.data.status != "accepted"
+            || request.auth.uid in getAfter(notePath(resource.data.noteId)).data.collaboratorIds))
+        ||
+        (request.auth.uid == resource.data.senderId
+          && get(notePath(resource.data.noteId)).data.authorId == request.auth.uid
+          && resource.data.status == "rejected"
+          && request.resource.data.status == "pending"
+          && request.resource.data.noteId == resource.data.noteId
+          && request.resource.data.senderId == resource.data.senderId
+          && request.resource.data.receiverId == resource.data.receiverId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["encryptedNoteKey", "permission", "status", "createdAt"]))
+      );
+
+      allow delete: if signedIn()
         && (request.auth.uid == resource.data.receiverId
-            || request.auth.uid == resource.data.senderId);
-
-      allow delete: if request.auth != null
-        && (request.auth.uid == resource.data.senderId
-            || request.auth.uid == resource.data.receiverId);
+          || (request.auth.uid == resource.data.senderId
+            && get(notePath(resource.data.noteId)).data.authorId == request.auth.uid));
     }
 
-    // ── NOTE UPDATES (NEW) ──────────────────────────────────────
-    // Encrypted CRDT updates for real-time collaboration
     match /note_updates/{updateId} {
-      // FIX: Use resource.data (not request.resource.data) for reads
-      allow read: if request.auth != null
-        && (request.auth.uid == get(/databases/$(database)/documents/notes/$(resource.data.noteId)).data.authorId
-            || request.auth.uid in get(/databases/$(database)/documents/notes/$(resource.data.noteId)).data.collaboratorIds);
+      function updateNote() {
+        return get(notePath(request.resource.data.noteId));
+      }
 
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.senderId;
+      allow read: if signedIn()
+        && (isOwner(get(notePath(resource.data.noteId)))
+          || isCollaborator(get(notePath(resource.data.noteId))));
 
-      // Updates are immutable — no update allowed
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.senderId
+        && request.resource.data.keys().hasOnly([
+          "noteId", "senderId", "clientId", "encryptedUpdate", "iv", "createdAt"
+        ])
+        && request.resource.data.clientId is string
+        && request.resource.data.clientId.size() <= 100
+        && request.resource.data.encryptedUpdate is string
+        && request.resource.data.encryptedUpdate.size() <= 700000
+        && request.resource.data.iv is string
+        && request.resource.data.iv.size() <= 100
+        && request.resource.data.createdAt is timestamp
+        && updateNote().data.mode == "collab"
+        && (isOwner(updateNote()) || collaboratorCanEdit(updateNote()));
+
       allow update: if false;
-
-      // Only note author can delete (for compaction)
-      allow delete: if request.auth != null
-        && request.auth.uid == get(/databases/$(database)/documents/notes/$(resource.data.noteId)).data.authorId;
+      allow delete: if isOwner(get(notePath(resource.data.noteId)));
     }
-
   }
 }

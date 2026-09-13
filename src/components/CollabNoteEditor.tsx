@@ -9,6 +9,7 @@ import { RemoteCursors } from "./RemoteCursors";
 import { motion } from "framer-motion";
 import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
+import { computeTextDelta } from "../lib/textDelta";
 
 interface CollabNoteEditorProps {
   noteId: string;
@@ -27,11 +28,16 @@ export function CollabNoteEditor({
   displayName = "Anonymous",
   photoURL = null,
 }: CollabNoteEditorProps) {
-  const { text, title, isLoading, isSynced, error, saveSnapshot } = useCollabEditor(
-    noteId,
-    userId,
-    privateKey
-  );
+  const {
+    text,
+    title,
+    isLoading,
+    isSynced,
+    error,
+    canEdit,
+    canCompact,
+    saveSnapshot,
+  } = useCollabEditor(noteId, userId, privateKey);
 
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,6 +46,7 @@ export function CollabNoteEditor({
 
   // Track content in a ref to avoid React re-render on remote updates
   const contentRef = useRef("");
+  const [cursorContent, setCursorContent] = useState("");
 
   // Presence tracking with cursor
   const { activeUsers, updateCursor } = usePresence(noteId, userId, displayName, photoURL);
@@ -51,6 +58,7 @@ export function CollabNoteEditor({
     // Set initial content
     const initial = text.toString();
     contentRef.current = initial;
+    const initialContentTimer = setTimeout(() => setCursorContent(initial), 0);
     if (textareaRef.current) {
       textareaRef.current.value = initial;
     }
@@ -96,6 +104,7 @@ export function CollabNoteEditor({
       // Directly set textarea value (bypass React render cycle)
       const newContent = text.toString();
       contentRef.current = newContent;
+      setCursorContent(newContent);
       textarea.value = newContent;
 
       // Immediately restore cursor — no requestAnimationFrame needed
@@ -105,7 +114,10 @@ export function CollabNoteEditor({
     };
 
     text.observe(observer);
-    return () => text.unobserve(observer);
+    return () => {
+      clearTimeout(initialContentTimer);
+      text.unobserve(observer);
+    };
   }, [text]);
 
   // Handle local text changes
@@ -117,36 +129,15 @@ export function CollabNoteEditor({
       const oldValue = contentRef.current;
       isLocalChangeRef.current = true;
 
-      if (newValue.length > oldValue.length) {
-        // Insertion
-        const selEnd = e.target.selectionEnd;
-        const insertPos = selEnd - (newValue.length - oldValue.length);
-        const insertText = newValue.slice(insertPos, selEnd);
-        text.insert(insertPos, insertText);
-      } else if (newValue.length < oldValue.length) {
-        // Deletion
-        const selStart = e.target.selectionStart;
-        const deleteCount = oldValue.length - newValue.length;
-        text.delete(selStart, deleteCount);
-      } else {
-        // Replacement (same length)
-        let start = 0;
-        while (start < oldValue.length && oldValue[start] === newValue[start]) {
-          start++;
-        }
-        let endOld = oldValue.length - 1;
-        let endNew = newValue.length - 1;
-        while (endOld > start && endNew > start && oldValue[endOld] === newValue[endNew]) {
-          endOld--;
-          endNew--;
-        }
-        if (endOld >= start) {
-          text.delete(start, endOld - start + 1);
-          text.insert(start, newValue.slice(start, endNew + 1));
-        }
-      }
+      const delta = computeTextDelta(oldValue, newValue);
+
+      text.doc?.transact(() => {
+        if (delta.deleteCount > 0) text.delete(delta.start, delta.deleteCount);
+        if (delta.insertText) text.insert(delta.start, delta.insertText);
+      });
 
       contentRef.current = newValue;
+      setCursorContent(newValue);
 
       // Publish cursor position
       updateCursor(e.target.selectionEnd);
@@ -221,18 +212,20 @@ export function CollabNoteEditor({
             {isSynced ? "Synced" : "Syncing..."}
           </div>
 
-          {/* Save button */}
-          <button
-            onClick={async () => {
-              setSaving(true);
-              try { await saveSnapshot(); } finally { setSaving(false); }
-            }}
-            disabled={saving}
-            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-primary border-2 border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            <span className="hidden sm:inline">{saving ? "Saving..." : "Save"}</span>
-          </button>
+          {/* Only the owner creates checkpoints and prunes represented updates. */}
+          {canCompact && (
+            <button
+              onClick={async () => {
+                setSaving(true);
+                try { await saveSnapshot(); } finally { setSaving(false); }
+              }}
+              disabled={saving}
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-primary border-2 border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              <span className="hidden sm:inline">{saving ? "Saving..." : "Checkpoint"}</span>
+            </button>
+          )}
 
           {/* Share button */}
           {onShare && (
@@ -258,7 +251,7 @@ export function CollabNoteEditor({
         {/* Remote cursor line indicators (left edge bars) */}
         <RemoteCursors
           users={activeUsers}
-          content={contentRef.current}
+          content={cursorContent}
           textareaRef={textareaRef}
         />
 
@@ -270,9 +263,15 @@ export function CollabNoteEditor({
           onKeyUp={handleCursorChange}
           onClick={handleCursorChange}
           placeholder="Start collaborating..."
+          readOnly={!canEdit}
           className="w-full bg-transparent min-h-[50vh] sm:min-h-[400px] resize-none focus:outline-none placeholder:text-foreground/25 leading-relaxed text-foreground/85 text-base sm:text-lg"
           style={{ lineHeight: "1.75em" }}
         />
+        {!canEdit && (
+          <p className="mt-3 text-xs font-medium text-foreground/45">
+            View-only access
+          </p>
+        )}
       </motion.div>
     </div>
   );

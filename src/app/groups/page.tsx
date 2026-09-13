@@ -21,7 +21,7 @@ export default function GroupsPage() {
 
   // Subscribe to notes
   useEffect(() => {
-    if (!user || !hasValidConfig) { setNotes([]); return; }
+    if (!user || !hasValidConfig) return;
     const q = query(collection(db, "notes"), where("authorId", "==", user.uid));
     const unsub = onSnapshot(q, (snap) => {
       setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Note[]);
@@ -31,7 +31,7 @@ export default function GroupsPage() {
 
   // Subscribe to groups
   useEffect(() => {
-    if (!user || !hasValidConfig) { setGroups([]); return; }
+    if (!user || !hasValidConfig) return;
     const q = query(collection(db, "groups"), where("authorId", "==", user.uid));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Group[];

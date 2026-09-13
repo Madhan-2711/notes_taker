@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { type Group, type Note, GROUP_COLORS, groupSchema } from "../lib/validations";
 import { updateGroup, syncGroupNotes, deleteGroup } from "../lib/groupsService";
@@ -35,6 +35,8 @@ export function ManageGroupModal({
   // Pre-fill when group changes
   useEffect(() => {
     if (group) {
+      // This modal intentionally resets its draft when a different group opens.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(group.title);
       setColor(group.color ?? GROUP_COLORS[0].value);
       setSelectedNoteIds(groupNoteIds);
@@ -65,8 +67,9 @@ export function ManageGroupModal({
         syncGroupNotes(group.id, addIds, removeIds),
       ]);
       onClose();
-    } catch (err: any) {
-      setError(err.errors?.[0]?.message || err.message || "Failed to save");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to save";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -83,8 +86,8 @@ export function ManageGroupModal({
       await deleteGroup(group.id, userId);
       onDeleted();
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to delete group");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete group");
       setDeleting(false);
     }
   };

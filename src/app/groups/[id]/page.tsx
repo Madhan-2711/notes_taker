@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
 import { useUserKeys } from "../../../hooks/useUserKeys";
 import { db, hasValidConfig } from "../../../lib/firebaseConfig";
-import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { type Note, type Group } from "../../../lib/validations";
 import { subscribeToNotes, deleteNote } from "../../../lib/services/notes/normalNotesService";
 import { NoteCard } from "../../../components/NoteCard";
@@ -28,14 +28,14 @@ export default function GroupDetailPage() {
 
   // Subscribe to notes (both authored and collab)
   useEffect(() => {
-    if (!user || !hasValidConfig) { setNotes([]); return; }
+    if (!user || !hasValidConfig) return;
     const unsub = subscribeToNotes(user.uid, (data) => setNotes(data));
     return () => unsub();
   }, [user]);
 
   // Subscribe to groups
   useEffect(() => {
-    if (!user || !hasValidConfig) { setGroups([]); return; }
+    if (!user || !hasValidConfig) return;
     const q = query(collection(db, "groups"), where("authorId", "==", user.uid));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Group[];

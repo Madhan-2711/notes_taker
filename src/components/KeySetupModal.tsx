@@ -21,8 +21,8 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+    if (password.length < 12) {
+      setError("Use a vault passphrase of at least 12 characters");
       return;
     }
 

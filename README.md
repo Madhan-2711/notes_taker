@@ -17,15 +17,15 @@
 ### 🔐 End-to-End Encryption
 - **AES-256-GCM** for note encryption with random 12-byte IVs
 - **RSA-OAEP 4096-bit** keypairs per user for secure key exchange
-- **PBKDF2 → AES-KW** vault password system for cross-device private key sync
-- **Zero-knowledge architecture** — the server never sees plaintext data
+- **PBKDF2 → AES-256-GCM** versioned vault backups with a random per-backup salt
+- Encrypted secure-note content and encrypted collaborative titles/content; normal notes remain plaintext by design
 
 ### 👥 Real-Time Collaboration
 - **Yjs CRDT** engine for conflict-free real-time text editing
 - **Encrypted updates** — every Yjs update is AES-encrypted before syncing via Firestore
-- **Live presence** with heartbeat-based tracking (15s interval, 30s TTL)
-- **Automatic snapshot compaction** every 50 updates for performance
-- **Manual Save** button for explicit persistence
+- **Live presence** with heartbeat-based tracking (10s interval, 30s TTL)
+- **Incremental Yjs updates**, merged during a short debounce and encrypted before upload
+- **Owner-only lossless checkpointing** that deletes only updates represented by the snapshot
 
 ### 🤝 Friend System
 - Search users by email and send friend requests
@@ -90,7 +90,7 @@
 |-------|-----------|---------|
 | Note encryption | AES-256-GCM | Encrypt/decrypt note title & content |
 | Key wrapping | RSA-OAEP 4096-bit | Wrap per-note AES keys for each collaborator |
-| Vault backup | PBKDF2 (600K iterations) → AES-KW | Password-derived key to wrap private key for Firestore backup |
+| Vault backup | PBKDF2-SHA-256 (600K iterations) → AES-256-GCM | Versioned, authenticated private-key backup with random salt and IV |
 | Local storage | IndexedDB | Store private key on device |
 
 ### Collaboration Flow
@@ -238,6 +238,8 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+# Optional but strongly recommended in production
+NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY=your-recaptcha-enterprise-site-key
 ```
 
 ### 4. Deploy Firestore Security Rules
@@ -263,19 +265,29 @@ npm run build
 npm start
 ```
 
+### 7. Run verification
+
+```bash
+npm run lint
+npm test
+npm run test:rules
+```
+
 ---
 
 ## 🗄️ Firestore Collections
 
 | Collection | Document Fields | Purpose |
 |-----------|----------------|---------|
-| `notes` | `mode`, `title`, `content`, `authorId`, `collaboratorIds`, `encryptedKeys`, `latestSnapshot`, `snapshotIv`, `groupIds`, `createdAt`, `updatedAt` | All notes (normal, encrypted, collaborative) |
-| `groups` | `title`, `color`, `authorId`, `noteIds`, `createdAt` | Note organization groups |
-| `users` | `email`, `displayName`, `photoURL`, `publicKey`, `wrappedPrivateKey`, `createdAt` | User profiles with public encryption keys |
+| `notes` | `mode`, encrypted or plaintext content fields, `authorId`, `collaboratorIds`, `collaboratorRoles`, `encryptedKeys`, `latestSnapshot`, `snapshotIv`, `groupIds`, timestamps | Notes, membership roles, and encrypted checkpoints |
+| `groups` | `title`, `color`, `authorId`, `createdAt` | Note organization; membership lives in each note's `groupIds` |
+| `users` | `email`, `wrappedPrivateKey`, `createdAt` | Private account and vault data; readable only by that user |
+| `public_profiles` | `displayName`, `photoURL`, `publicKey`, `createdAt` | Non-sensitive profile and public encryption key; exact UID reads only |
+| `email_directory` | `uid` | Exact-email lookup; collection listing is denied |
 | `friend_requests` | `senderId`, `senderEmail`, `senderName`, `receiverId`, `receiverEmail`, `receiverName`, `status`, `createdAt` | Pending/accepted/rejected friend requests |
-| `friends` | `users` (array of 2 UIDs), `createdAt` | Established friendships |
+| `friends` | `users` (array of 2 UIDs), `requestId`, `createdAt` | Friendships created atomically with accepted requests |
 | `collab_invites` | `noteId`, `senderId`, `senderName`, `receiverId`, `receiverName`, `encryptedNoteKey`, `permission`, `status`, `createdAt` | Collaboration invitations with wrapped keys |
-| `note_updates` | `noteId`, `senderId`, `encryptedUpdate`, `iv`, `createdAt` | Encrypted Yjs CRDT updates for real-time sync |
+| `note_updates` | `noteId`, `senderId`, `clientId`, `encryptedUpdate`, `iv`, `createdAt` | Encrypted incremental Yjs CRDT updates |
 | `notes/{id}/presence` | `displayName`, `photoURL`, `lastSeen` | Live user presence per note |
 
 ---
@@ -286,12 +298,12 @@ npm start
 
 The app uses comprehensive security rules that enforce:
 
-- **Notes**: Only the author or listed collaborators can read/update. A user with a pending invite can also read and add themselves as a collaborator.
-- **Users**: Any authenticated user can read profiles (for public key access). Only the owner can write their own profile.
-- **Friend Requests**: Only sender and receiver can read. Only the receiver can accept/reject.
-- **Friends**: Only the two users in the friendship can read/delete.
-- **Collab Invites**: Only sender and receiver can access. Both can update (sender to re-invite, receiver to accept/reject).
-- **Note Updates**: Only note author/collaborators can read. Only authenticated users can create (for their own updates). Updates are immutable.
+- **Notes**: Only owners and accepted collaborators can read. Owners control membership; editors publish updates; viewers are read-only.
+- **Users**: Vault records are private. Public profiles support exact UID reads but cannot be enumerated.
+- **Friend Requests**: Only sender and receiver can read. Acceptance and friendship creation occur in one validated batch.
+- **Friends**: A friendship requires an accepted request and can only be read/deleted by its members.
+- **Collab Invites**: Only a note owner can create an invitation. Acceptance and membership creation are atomic.
+- **Note Updates**: Only owners and editors can create bounded encrypted updates. Updates are immutable and only owners can checkpoint/prune them.
 
 ### Vault Password System
 
@@ -299,13 +311,17 @@ When a user first creates encrypted/collaborative notes:
 1. An RSA-OAEP 4096-bit keypair is generated in the browser
 2. The **private key** is stored locally in IndexedDB
 3. The **public key** is stored in Firestore (accessible to all authenticated users)
-4. The user is prompted to set a **vault password** which wraps their private key using PBKDF2 → AES-KW and stores it in Firestore
+4. The user is prompted to set a **vault password** which encrypts their private key using a versioned PBKDF2 → AES-GCM envelope and stores it in their private Firestore record
 
 On a new device:
 1. The app detects no local private key
 2. Finds the wrapped private key in Firestore
 3. Prompts the user for their vault password
 4. Unwraps the private key locally and stores it in IndexedDB
+
+### Upgrade note
+
+After deploying these rules, each existing user must sign in once to migrate their public profile and exact-email directory entry. Existing vault backups remain readable and are automatically replaced with the versioned random-salt format the next time the user backs up their key. Deploy and verify `firestore.rules` before releasing the updated client.
 
 ---
 

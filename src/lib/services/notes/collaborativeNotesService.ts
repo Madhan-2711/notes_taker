@@ -15,6 +15,7 @@ import {
   query,
   where,
   writeBatch,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { encryptData } from "../crypto/encrypt";
@@ -24,6 +25,7 @@ import { encryptKeyForUser, decryptKeyFromUser } from "../crypto/sharing";
 import { addNotesToGroup } from "../../groupsService";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "../crypto/serialization";
 import * as Y from "yjs";
+import type { CollabRole } from "../../validations";
 
 /**
  * Creates a collaborative note.
@@ -47,17 +49,21 @@ export async function createCollabNote(
   const snapshot = Y.encodeStateAsUpdate(ydoc);
   const snapshotBase64 = arrayBufferToBase64(snapshot.buffer);
 
-  // Generate AES key and encrypt the snapshot
+  // Generate one AES key and encrypt both title and document snapshot.
   const noteKey = await generateAESKey();
   const encryptedSnapshot = await encryptData(snapshotBase64, noteKey);
+  const encryptedTitle = await encryptData(title, noteKey);
 
   // Wrap the AES key with the author's public key
   const wrappedKey = await encryptKeyForUser(noteKey, publicKey);
 
   const newNote = {
     mode: "collab" as const,
-    title,
+    title: "Encrypted collaborative note",
+    encryptedTitle: encryptedTitle.ciphertext,
+    titleIv: encryptedTitle.iv,
     collaboratorIds: [] as string[],
+    collaboratorRoles: {} as Record<string, "editor" | "viewer">,
     encryptedKeys: { [userId]: wrappedKey },
     latestSnapshot: encryptedSnapshot.ciphertext,
     snapshotIv: encryptedSnapshot.iv,
@@ -89,6 +95,8 @@ export async function loadCollabNote(
   ydoc: Y.Doc;
   noteKey: CryptoKey;
   title: string;
+  authorId: string;
+  role: CollabRole;
 }> {
   const ref = doc(db, "notes", noteId);
   const snap = await getDoc(ref);
@@ -96,6 +104,13 @@ export async function loadCollabNote(
   if (!snap.exists()) throw new Error("Note not found");
 
   const data = snap.data();
+  if (data.authorId === userId && !data.collaboratorRoles) {
+    const legacyRoles = Object.fromEntries(
+      ((data.collaboratorIds || []) as string[]).map((uid) => [uid, "editor"])
+    );
+    await updateDoc(ref, { collaboratorRoles: legacyRoles });
+    data.collaboratorRoles = legacyRoles;
+  }
   const wrappedKey = data.encryptedKeys?.[userId];
 
   if (!wrappedKey) {
@@ -119,10 +134,22 @@ export async function loadCollabNote(
     Y.applyUpdate(ydoc, snapshotBytes);
   }
 
+  const title =
+    data.encryptedTitle && data.titleIv
+      ? await decryptData(data.encryptedTitle, data.titleIv, noteKey)
+      : data.title || "Untitled";
+
   return {
     ydoc,
     noteKey,
-    title: data.title || "Untitled",
+    title,
+    authorId: data.authorId,
+    role:
+      data.authorId === userId
+        ? "owner"
+        : data.collaboratorRoles?.[userId] === "viewer"
+          ? "viewer"
+          : "editor",
   };
 }
 

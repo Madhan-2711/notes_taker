@@ -42,6 +42,8 @@ export function ViewNoteModal({
   // Decrypt secure notes on open
   useEffect(() => {
     if (!note || !isSecureNote(note)) {
+      // Closing or changing the note intentionally clears decrypted UI state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDecryptedTitle(null);
       setDecryptedContent(null);
       setDecryptError(null);

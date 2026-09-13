@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 
 interface PresenceUser {
   uid: string;
@@ -44,9 +45,11 @@ export function PresenceIndicator({ users }: PresenceIndicatorProps) {
               title={user.displayName}
             >
               {user.photoURL ? (
-                <img
+                <Image
                   src={user.photoURL}
                   alt={user.displayName}
+                  width={32}
+                  height={32}
                   className="w-full h-full object-cover"
                 />
               ) : (

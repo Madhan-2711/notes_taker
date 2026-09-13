@@ -4,7 +4,6 @@
 
 import {
   collection,
-  addDoc,
   updateDoc,
   doc,
   setDoc,
@@ -14,6 +13,7 @@ import {
   getDoc,
   onSnapshot,
   arrayUnion,
+  writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
@@ -35,6 +35,20 @@ export async function sendCollabInvite(
   permission: "viewer" | "editor",
   noteKey: CryptoKey
 ): Promise<void> {
+  const noteSnap = await getDoc(doc(db, "notes", noteId));
+  if (!noteSnap.exists() || noteSnap.data().authorId !== senderId) {
+    throw new Error("Only the note owner can invite collaborators.");
+  }
+
+  // Lazily migrate pre-role collaborative notes. Existing collaborators were
+  // historically editors, so preserving that role avoids breaking access.
+  if (!noteSnap.data().collaboratorRoles) {
+    const legacyRoles = Object.fromEntries(
+      ((noteSnap.data().collaboratorIds || []) as string[]).map((uid) => [uid, "editor"])
+    );
+    await updateDoc(noteSnap.ref, { collaboratorRoles: legacyRoles });
+  }
+
   // Get recipient's public key for key wrapping
   const recipientPublicKey = await getUserPublicKey(receiverId);
   const encryptedNoteKey = await encryptKeyForUser(noteKey, recipientPublicKey);
@@ -71,12 +85,8 @@ export async function getIncomingInvites(
  * Accept a collab invite.
  * Decrypts the note key and adds the user to the note's collaborators.
  *
- * IMPORTANT: We must NOT read the note document before updating it —
- * Firestore rules block reads until the user is a collaborator.
- * Instead, we use arrayUnion() and dot-notation to append atomically.
- *
- * Order matters: update the note FIRST (while invite is still "pending",
- * which the security rule checks), THEN mark the invite as "accepted".
+ * The membership and invitation status writes are committed atomically.
+ * Security rules validate both post-write documents with getAfter().
  */
 export async function acceptInvite(
   inviteId: string,
@@ -89,6 +99,9 @@ export async function acceptInvite(
   if (!inviteSnap.exists()) throw new Error("Invite not found");
 
   const invite = inviteSnap.data() as Omit<CollabInvite, "id">;
+  if (invite.receiverId !== userId || invite.status !== "pending") {
+    throw new Error("This invitation is not valid for the current user.");
+  }
 
   // Decrypt the note key using the receiver's private key
   const noteKey = await decryptKeyFromUser(invite.encryptedNoteKey, privateKey);
@@ -97,18 +110,18 @@ export async function acceptInvite(
   const userPublicKey = await getUserPublicKey(userId);
   const reEncryptedKey = await encryptKeyForUser(noteKey, userPublicKey);
 
-  // Step 1: Update the note — NO prior read needed.
-  // arrayUnion atomically appends without reading.
-  // Dot-notation sets a nested field without overwriting siblings.
+  // arrayUnion and dot notation avoid reading or replacing membership maps.
   const noteRef = doc(db, "notes", invite.noteId);
-  await updateDoc(noteRef, {
+  const batch = writeBatch(db);
+  batch.update(noteRef, {
     collaboratorIds: arrayUnion(userId),
     [`encryptedKeys.${userId}`]: reEncryptedKey,
+    [`collaboratorRoles.${userId}`]: invite.permission,
+    updatedAt: Date.now(),
   });
 
-  // Step 2: Mark invite as accepted (MUST be after note update,
-  // because the note update rule checks that the invite is still "pending")
-  await updateDoc(inviteRef, { status: "accepted" });
+  batch.update(inviteRef, { status: "accepted" });
+  await batch.commit();
 }
 
 /** Reject a collab invite. */
@@ -119,6 +132,7 @@ export async function rejectInvite(inviteId: string): Promise<void> {
 /** Revoke a collaborator's access to a note. */
 export async function revokeAccess(
   noteId: string,
+  ownerId: string,
   collaboratorId: string
 ): Promise<void> {
   const noteRef = doc(db, "notes", noteId);
@@ -126,13 +140,23 @@ export async function revokeAccess(
   if (!noteSnap.exists()) throw new Error("Note not found");
 
   const noteData = noteSnap.data();
+  if (noteData.authorId !== ownerId) {
+    throw new Error("Only the note owner can revoke access.");
+  }
   const collaboratorIds = (noteData.collaboratorIds || []).filter(
     (id: string) => id !== collaboratorId
   );
   const encryptedKeys = { ...noteData.encryptedKeys };
   delete encryptedKeys[collaboratorId];
+  const collaboratorRoles = { ...(noteData.collaboratorRoles || {}) };
+  delete collaboratorRoles[collaboratorId];
 
-  await updateDoc(noteRef, { collaboratorIds, encryptedKeys });
+  await updateDoc(noteRef, {
+    collaboratorIds,
+    encryptedKeys,
+    collaboratorRoles,
+    updatedAt: Date.now(),
+  });
 }
 
 /** Get profiles of all collaborators on a note. */
@@ -148,10 +172,14 @@ export async function getCollaborators(
 
   const profiles: UserProfile[] = [];
   for (const uid of collaboratorIds) {
-    const profileRef = doc(db, "users", uid);
+    const profileRef = doc(db, "public_profiles", uid);
     const profileSnap = await getDoc(profileRef);
     if (profileSnap.exists()) {
-      profiles.push({ uid: profileSnap.id, ...profileSnap.data() } as UserProfile);
+      profiles.push({
+        uid: profileSnap.id,
+        email: "",
+        ...profileSnap.data(),
+      } as UserProfile);
     }
   }
 

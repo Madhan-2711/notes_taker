@@ -45,6 +45,8 @@ export function EditNoteModal({
   useEffect(() => {
     if (!note) return;
 
+    // Opening a different note intentionally replaces the modal's draft state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedGroupIds(note.groupIds ?? []);
     setError(null);
     setDecryptError(null);

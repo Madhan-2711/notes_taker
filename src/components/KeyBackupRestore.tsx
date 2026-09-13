@@ -14,7 +14,6 @@ import {
   wrapPrivateKey,
   unwrapPrivateKey,
   storePrivateKey,
-  exportPublicKey,
 } from "../lib/services/crypto/keys";
 import {
   updateWrappedPrivateKey,
@@ -64,8 +63,8 @@ export function KeyBackupRestore({
   /** Backup: encrypt private key and store in Firestore */
   const handleBackup = async () => {
     if (!privateKey || !password) return;
-    if (password.length < 6) {
-      setError("Passcode must be at least 6 characters.");
+    if (password.length < 12) {
+      setError("Use a vault passphrase of at least 12 characters.");
       return;
     }
     if (password !== confirmPassword) {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { type UserProfile } from "../lib/validations";
 import { Trash2 } from "lucide-react";
+import Image from "next/image";
 
 interface FriendCardProps {
   friend: UserProfile & { friendDocId: string };
@@ -39,7 +40,13 @@ export function FriendCard({ friend, onRemove }: FriendCardProps) {
       {/* Avatar */}
       <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
         {friend.photoURL ? (
-          <img src={friend.photoURL} alt={friend.displayName} className="w-full h-full object-cover rounded-full" />
+          <Image
+            src={friend.photoURL}
+            alt={friend.displayName}
+            width={48}
+            height={48}
+            className="w-full h-full object-cover rounded-full"
+          />
         ) : (
           friend.displayName?.charAt(0)?.toUpperCase() || "?"
         )}
@@ -48,7 +55,9 @@ export function FriendCard({ friend, onRemove }: FriendCardProps) {
       {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="font-bold text-sm truncate">{friend.displayName}</p>
-        <p className="text-xs text-foreground/45 truncate">{friend.email}</p>
+        {friend.email && (
+          <p className="text-xs text-foreground/45 truncate">{friend.email}</p>
+        )}
       </div>
 
       {/* Remove */}
