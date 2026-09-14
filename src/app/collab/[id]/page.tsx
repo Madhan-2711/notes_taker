@@ -5,7 +5,6 @@ import { useAuth } from "../../../hooks/useAuth";
 import { useUserKeys } from "../../../hooks/useUserKeys";
 import { CollabNoteEditor } from "../../../components/CollabNoteEditor";
 import { CollaboratorManager } from "../../../components/CollaboratorManager";
-import { VaultUnlockModal } from "../../../components/VaultUnlockModal";
 import { sendCollabInvite } from "../../../lib/services/social/collaborationService";
 import { decryptKeyFromUser } from "../../../lib/services/crypto/sharing";
 import { doc, getDoc } from "firebase/firestore";
@@ -21,9 +20,6 @@ export default function CollabNotePage() {
     privateKey,
     isReady: keysReady,
     hasKeys,
-    needsVaultPassword,
-    unlockVault,
-    error: keyError,
   } = useUserKeys();
 
   const [showCollabManager, setShowCollabManager] = useState(false);
@@ -101,19 +97,12 @@ export default function CollabNotePage() {
 
   if (!hasKeys) {
     return (
-      <>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto gap-4">
-          <p className="text-foreground/60 text-lg">Encryption keys are required to access collaborative notes.</p>
-          <Link href="/notes" className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
-            <ArrowLeft size={14} /> Back to notes
-          </Link>
-        </div>
-        <VaultUnlockModal
-          isOpen={needsVaultPassword}
-          onUnlock={unlockVault}
-          error={keyError}
-        />
-      </>
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto gap-4">
+        <p className="text-foreground/60 text-lg">Encryption keys are required to access collaborative notes.</p>
+        <Link href="/notes" className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+          <ArrowLeft size={14} /> Back to notes
+        </Link>
+      </div>
     );
   }
 

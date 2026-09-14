@@ -9,7 +9,10 @@ import { RemoteCursors } from "./RemoteCursors";
 import { motion } from "framer-motion";
 import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
-import { computeTextDelta } from "../lib/textDelta";
+import {
+  computeTextDelta,
+  transformSelectionForRemoteDelta,
+} from "../lib/textDelta";
 
 interface CollabNoteEditorProps {
   noteId: string;
@@ -75,31 +78,12 @@ export function CollabNoteEditor({
 
       const prevCursor = textarea.selectionStart;
       const prevSelEnd = textarea.selectionEnd;
-
-      // Walk the delta to compute cursor shift
-      let adjustedCursor = prevCursor;
-      let adjustedSelEnd = prevSelEnd;
-      let pos = 0;
-
-      for (const op of event.delta) {
-        if (op.retain != null) {
-          pos += op.retain;
-        } else if (op.insert != null) {
-          const insertLen = typeof op.insert === "string" ? op.insert.length : 1;
-          if (pos <= prevCursor) adjustedCursor += insertLen;
-          if (pos <= prevSelEnd) adjustedSelEnd += insertLen;
-          pos += insertLen;
-        } else if (op.delete != null) {
-          if (pos < prevCursor) {
-            const shift = Math.min(op.delete, prevCursor - pos);
-            adjustedCursor -= shift;
-          }
-          if (pos < prevSelEnd) {
-            const shift = Math.min(op.delete, prevSelEnd - pos);
-            adjustedSelEnd -= shift;
-          }
-        }
-      }
+      const selectionDirection = textarea.selectionDirection;
+      const adjustedSelection = transformSelectionForRemoteDelta(
+        prevCursor,
+        prevSelEnd,
+        event.delta
+      );
 
       // Directly set textarea value (bypass React render cycle)
       const newContent = text.toString();
@@ -109,8 +93,14 @@ export function CollabNoteEditor({
 
       // Immediately restore cursor — no requestAnimationFrame needed
       const clamp = (v: number) => Math.max(0, Math.min(v, textarea.value.length));
-      textarea.selectionStart = clamp(adjustedCursor);
-      textarea.selectionEnd = clamp(adjustedSelEnd);
+      const adjustedCursor = clamp(adjustedSelection.start);
+      const adjustedSelEnd = clamp(adjustedSelection.end);
+      textarea.setSelectionRange(
+        adjustedCursor,
+        adjustedSelEnd,
+        selectionDirection
+      );
+      updateCursor(adjustedSelEnd);
     };
 
     text.observe(observer);
@@ -118,7 +108,7 @@ export function CollabNoteEditor({
       clearTimeout(initialContentTimer);
       text.unobserve(observer);
     };
-  }, [text]);
+  }, [text, updateCursor]);
 
   // Handle local text changes
   const handleChange = useCallback(

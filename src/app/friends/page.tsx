@@ -22,8 +22,6 @@ import {
 import { FriendRequestCard } from "../../components/FriendRequestCard";
 import { FriendCard } from "../../components/FriendCard";
 import { CollabInviteCard } from "../../components/CollabInviteCard";
-import { VaultUnlockModal } from "../../components/VaultUnlockModal";
-import { KeySetupModal } from "../../components/KeySetupModal";
 import { KeyBackupRestore } from "../../components/KeyBackupRestore";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock, CloudUpload } from "lucide-react";
@@ -35,11 +33,7 @@ export default function FriendsPage() {
   const router = useRouter();
   const {
     privateKey,
-    needsVaultPassword,
     needsVaultSetup,
-    setVaultPassword,
-    unlockVault,
-    error: keyError,
   } = useUserKeys();
 
   const [searchEmail, setSearchEmail] = useState("");
@@ -50,7 +44,6 @@ export default function FriendsPage() {
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[]>([]);
   const [collabInvites, setCollabInvites] = useState<CollabInvite[]>([]);
-  const [vaultSetupDismissed, setVaultSetupDismissed] = useState(false);
   const [showKeyExport, setShowKeyExport] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -307,14 +300,6 @@ export default function FriendsPage() {
                   ? "⚠️ You need to set up a vault password before you can accept encrypted note invites."
                   : "⚠️ Unlock your vault password to accept encrypted invites."}
               </span>
-              {needsVaultSetup && (
-                <button
-                  onClick={() => setVaultSetupDismissed(false)}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition-colors shrink-0"
-                >
-                  Set Password
-                </button>
-              )}
             </div>
           )}
           <div className="space-y-3">
@@ -424,20 +409,6 @@ export default function FriendsPage() {
           </div>
         )}
       </motion.section>
-
-      {/* Vault Unlock Modal */}
-      <VaultUnlockModal
-        isOpen={needsVaultPassword}
-        onUnlock={unlockVault}
-        error={keyError}
-      />
-
-      {/* Key Setup Modal */}
-      <KeySetupModal
-        isOpen={needsVaultSetup && !vaultSetupDismissed}
-        onClose={() => setVaultSetupDismissed(true)}
-        onSetPassword={setVaultPassword}
-      />
 
       {/* Key Backup/Restore Modal */}
       <KeyBackupRestore

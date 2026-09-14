@@ -10,8 +10,6 @@ import { createNormalNote } from "../../lib/services/notes/normalNotesService";
 import { createSecureNote } from "../../lib/services/notes/secureNotesService";
 import { createCollabNote } from "../../lib/services/notes/collaborativeNotesService";
 import { NoteModePicker } from "../../components/NoteModePicker";
-import { KeySetupModal } from "../../components/KeySetupModal";
-import { VaultUnlockModal } from "../../components/VaultUnlockModal";
 import { motion } from "framer-motion";
 import { ArrowLeft, Check, FolderOpen } from "lucide-react";
 import Link from "next/link";
@@ -24,10 +22,6 @@ export default function WritePage() {
     publicKey,
     isReady: keysReady,
     hasKeys,
-    needsVaultPassword,
-    needsVaultSetup,
-    setVaultPassword,
-    unlockVault,
     error: keyError,
   } = useUserKeys();
 
@@ -38,7 +32,6 @@ export default function WritePage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [vaultSetupDismissed, setVaultSetupDismissed] = useState(false);
 
   // Live-subscribe to user's groups for the multi-select
   useEffect(() => {
@@ -258,18 +251,6 @@ export default function WritePage() {
         </div>
       </motion.form>
 
-      {/* Vault modals */}
-      <KeySetupModal
-        isOpen={needsVaultSetup && !vaultSetupDismissed}
-        onClose={() => setVaultSetupDismissed(true)}
-        onSetPassword={setVaultPassword}
-      />
-
-      <VaultUnlockModal
-        isOpen={needsVaultPassword}
-        onUnlock={unlockVault}
-        error={keyError}
-      />
     </div>
   );
 }

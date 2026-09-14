@@ -71,8 +71,8 @@ export function KeyImportExport({
 
   const handleExport = async () => {
     if (!privateKey) return;
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
       return;
     }
     if (password !== confirmPassword) {
@@ -320,7 +320,7 @@ export function KeyImportExport({
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Enter password (min 8 characters)"
+                    placeholder="Enter password (min 6 characters)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-border/20 rounded-xl px-4 py-3 pr-10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -352,7 +352,7 @@ export function KeyImportExport({
                   </button>
                   <button
                     onClick={handleExport}
-                    disabled={loading || password.length < 8 || password !== confirmPassword}
+                    disabled={loading || password.length < 6 || password !== confirmPassword}
                     className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white font-bold text-sm py-2.5 rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-40"
                   >
                     {loading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}

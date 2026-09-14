@@ -63,8 +63,8 @@ export function KeyBackupRestore({
   /** Backup: encrypt private key and store in Firestore */
   const handleBackup = async () => {
     if (!privateKey || !password) return;
-    if (password.length < 12) {
-      setError("Use a vault passphrase of at least 12 characters.");
+    if (password.length < 6) {
+      setError("Use a vault password of at least 6 characters.");
       return;
     }
     if (password !== confirmPassword) {

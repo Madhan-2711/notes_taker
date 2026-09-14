@@ -5,6 +5,7 @@ import { AuthButton } from "../components/AuthButton";
 import { Logo } from "../components/Logo";
 import { NavBar } from "../components/NavBar";
 import { AuthProvider } from "../contexts/AuthContext";
+import { UserKeysProvider } from "../contexts/UserKeysContext";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
@@ -22,16 +23,18 @@ export default function RootLayout({
     <html lang="en" className={inter.className} suppressHydrationWarning>
       <body className="min-h-screen flex flex-col" suppressHydrationWarning>
         <AuthProvider>
-          <header className="sticky top-0 z-50 glass border-b border-white/10">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
-              <Logo />
-              <AuthButton />
-            </div>
-          </header>
-          <NavBar />
-          <main className="flex-1 flex flex-col">
-            {children}
-          </main>
+          <UserKeysProvider>
+            <header className="sticky top-0 z-50 glass border-b border-white/10">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+                <Logo />
+                <AuthButton />
+              </div>
+            </header>
+            <NavBar />
+            <main className="flex-1 flex flex-col">
+              {children}
+            </main>
+          </UserKeysProvider>
         </AuthProvider>
       </body>
     </html>
