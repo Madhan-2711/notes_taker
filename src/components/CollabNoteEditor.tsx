@@ -13,6 +13,16 @@ import {
   computeTextDelta,
   transformSelectionForRemoteDelta,
 } from "../lib/textDelta";
+import { DrawingCanvas } from "./DrawingCanvas";
+import { DrawingToolbar } from "./DrawingToolbar";
+import {
+  BOARD_WIDTH,
+  BOARD_HEIGHT,
+  DEFAULT_COLORS,
+  PEN_PRESETS,
+  isPenTool,
+  type DrawTool,
+} from "../lib/drawing";
 
 interface CollabNoteEditorProps {
   noteId: string;
@@ -33,6 +43,7 @@ export function CollabNoteEditor({
 }: CollabNoteEditorProps) {
   const {
     text,
+    strokes,
     title,
     isLoading,
     isSynced,
@@ -45,7 +56,21 @@ export function CollabNoteEditor({
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isLocalChangeRef = useRef(false);
-  const editorWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Drawing layer state: which tool is active and its color/size.
+  const [tool, setTool] = useState<DrawTool>("text");
+  const [color, setColor] = useState<string>(DEFAULT_COLORS[0]);
+  const [size, setSize] = useState<number>(PEN_PRESETS.pen.defaultSize);
+
+  // The board is a fixed logical size scaled to fit the viewport, so text wraps
+  // identically and ink lands in the same place for every collaborator.
+  const [scale, setScale] = useState(1);
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
+  const [drawingLimitReached, setDrawingLimitReached] = useState(false);
+  const boardWrapRef = useRef<HTMLDivElement>(null);
+
+  // Undo/redo scoped to this user's own strokes.
+  const undoManagerRef = useRef<Y.UndoManager | null>(null);
 
   // Track content in a ref to avoid React re-render on remote updates
   const contentRef = useRef("");
@@ -143,6 +168,40 @@ export function CollabNoteEditor({
     }
   }, [updateCursor]);
 
+  // Fit the fixed-size board into the available width. Re-runs once the board
+  // mounts (after loading), so the ref is attached before we measure.
+  useEffect(() => {
+    const el = boardWrapRef.current;
+    if (!el) return;
+    const measure = () => setScale(Math.min(1, el.clientWidth / BOARD_WIDTH));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isLoading, error]);
+
+  // Set up an undo manager on the drawing layer once it is available. Default
+  // tracked origins mean each user only undoes their own strokes, and undo
+  // results still publish to everyone through the normal update pipeline.
+  useEffect(() => {
+    if (!strokes) return;
+    const um = new Y.UndoManager(strokes, { captureTimeout: 250 });
+    undoManagerRef.current = um;
+    return () => {
+      um.destroy();
+      undoManagerRef.current = null;
+    };
+  }, [strokes]);
+
+  const selectTool = useCallback((next: DrawTool) => {
+    setTool(next);
+    setDrawingLimitReached(false);
+    if (isPenTool(next)) setSize(PEN_PRESETS[next].defaultSize);
+  }, []);
+
+  const undo = useCallback(() => undoManagerRef.current?.undo(), []);
+  const redo = useCallback(() => undoManagerRef.current?.redo(), []);
+
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8">
@@ -171,7 +230,7 @@ export function CollabNoteEditor({
   }
 
   return (
-    <div className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
+    <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -230,39 +289,93 @@ export function CollabNoteEditor({
         </div>
       </motion.div>
 
-      {/* Editor with remote cursors */}
-      <motion.div
-        ref={editorWrapperRef}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="glass neubrutal rounded-[var(--radius-xl)] p-4 sm:p-8 relative"
-      >
-        {/* Remote cursor line indicators (left edge bars) */}
-        <RemoteCursors
-          users={activeUsers}
-          content={cursorContent}
-          textareaRef={textareaRef}
-        />
+      {/* Tool switch: routes the next pointer drag to text or ink. Both layers
+          stay live at all times. */}
+      {canEdit && (
+        <div className="mb-4 flex justify-center">
+          <DrawingToolbar
+            tool={tool}
+            onToolChange={selectTool}
+            color={color}
+            onColorChange={setColor}
+            size={size}
+            onSizeChange={setSize}
+            onUndo={undo}
+            onRedo={redo}
+          />
+        </div>
+      )}
 
-        <textarea
-          ref={textareaRef}
-          defaultValue=""
-          onChange={handleChange}
-          onSelect={handleCursorChange}
-          onKeyUp={handleCursorChange}
-          onClick={handleCursorChange}
-          placeholder="Start collaborating..."
-          readOnly={!canEdit}
-          className="w-full bg-transparent min-h-[50vh] sm:min-h-[400px] resize-none focus:outline-none placeholder:text-foreground/25 leading-relaxed text-foreground/85 text-base sm:text-lg"
-          style={{ lineHeight: "1.75em" }}
-        />
-        {!canEdit && (
-          <p className="mt-3 text-xs font-medium text-foreground/45">
-            View-only access
-          </p>
-        )}
+      {/* Fixed-size workspace: the text editor with the drawing canvas layered
+          on top at the same coordinates. The whole board scales to fit. */}
+      <motion.div
+        ref={boardWrapRef}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="flex w-full justify-center pb-8"
+      >
+        <div
+          style={{ width: BOARD_WIDTH * scale, height: BOARD_HEIGHT * scale }}
+          className="relative"
+        >
+          <div
+            className="glass neubrutal absolute left-0 top-0 overflow-hidden rounded-[var(--radius-xl)]"
+            style={{
+              width: BOARD_WIDTH,
+              height: BOARD_HEIGHT,
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+            }}
+          >
+            <textarea
+              ref={textareaRef}
+              defaultValue=""
+              onChange={handleChange}
+              onSelect={handleCursorChange}
+              onKeyUp={handleCursorChange}
+              onClick={handleCursorChange}
+              onScroll={(event) => setEditorScrollTop(event.currentTarget.scrollTop)}
+              placeholder="Start collaborating..."
+              readOnly={!canEdit || tool !== "text"}
+              className="absolute inset-0 h-full w-full resize-none bg-transparent p-10 leading-relaxed text-foreground/85 placeholder:text-foreground/25 focus:outline-none"
+              style={{ fontSize: "18px", lineHeight: "1.9em" }}
+            />
+
+            {/* Remote text cursors (pointer-events off so they never block input) */}
+            <div className="pointer-events-none absolute inset-0">
+              <RemoteCursors
+                users={activeUsers}
+                content={cursorContent}
+                textareaRef={textareaRef}
+              />
+            </div>
+
+            {/* Ink layer on top; captures pointer only when a draw tool is on. */}
+            <DrawingCanvas
+              strokes={strokes}
+              canEdit={canEdit}
+              tool={tool}
+              color={color}
+              size={size}
+              authorId={userId}
+              scrollTop={editorScrollTop}
+              onLimitReached={() => setDrawingLimitReached(true)}
+            />
+          </div>
+        </div>
       </motion.div>
+
+      {!canEdit && (
+        <p className="text-center text-xs font-medium text-foreground/45">
+          View-only access
+        </p>
+      )}
+      {drawingLimitReached && (
+        <p className="text-center text-xs font-medium text-amber-600">
+          Drawing limit reached. Erase some strokes before adding more.
+        </p>
+      )}
     </div>
   );
 }

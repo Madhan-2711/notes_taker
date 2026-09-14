@@ -28,9 +28,15 @@ import { loadCollabNote } from "../lib/services/notes/collaborativeNotesService"
 import { encryptData } from "../lib/services/crypto/encrypt";
 import { decryptData } from "../lib/services/crypto/decrypt";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "../lib/services/crypto/serialization";
+import type { Stroke } from "../lib/drawing";
 
 interface UseCollabEditorReturn {
   text: Y.Text | null;
+  /**
+   * Shared drawing layer. Lives in the same Y.Doc as `text`, so every stroke
+   * change flows through the same encrypted note_updates pipeline as the text.
+   */
+  strokes: Y.Map<Stroke> | null;
   title: string;
   isLoading: boolean;
   isSynced: boolean;
@@ -50,6 +56,7 @@ export function useCollabEditor(
   privateKey: CryptoKey | null
 ): UseCollabEditorReturn {
   const [text, setText] = useState<Y.Text | null>(null);
+  const [strokes, setStrokes] = useState<Y.Map<Stroke> | null>(null);
   const [title, setTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSynced, setIsSynced] = useState(false);
@@ -99,6 +106,12 @@ export function useCollabEditor(
 
         const ytext = ydoc.getText("content");
         setText(ytext);
+
+        // Drawing layer shares the same Y.Doc. Because the "update" listener
+        // below fires for any doc change, stroke edits publish and sync through
+        // the exact same encrypted pipeline as text — no extra wiring needed.
+        const ystrokes = ydoc.getMap<Stroke>("strokes");
+        setStrokes(ystrokes);
 
         const scheduleFlush = (delay = DEBOUNCE_MS) => {
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -256,7 +269,7 @@ export function useCollabEditor(
     }
   }, [noteId, canCompact]);
 
-  return { text, title, isLoading, isSynced, error, canEdit, canCompact, saveSnapshot };
+  return { text, strokes, title, isLoading, isSynced, error, canEdit, canCompact, saveSnapshot };
 }
 
 /** Save a full encrypted snapshot and clean up processed updates. */
