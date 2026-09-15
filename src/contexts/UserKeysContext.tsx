@@ -38,6 +38,7 @@ interface UserKeysContextValue {
   hasKeys: boolean;
   needsVaultPassword: boolean;
   needsVaultSetup: boolean;
+  openVaultSetup: () => void;
   setVaultPassword: (password: string) => Promise<void>;
   unlockVault: (password: string) => Promise<void>;
   error: string | null;
@@ -205,6 +206,10 @@ export function UserKeysProvider({ children }: { children: ReactNode }) {
     [user]
   );
 
+  const openVaultSetup = useCallback(() => {
+    setSetupDismissed(false);
+  }, []);
+
   const value = useMemo(
     () => ({
       publicKey,
@@ -213,6 +218,7 @@ export function UserKeysProvider({ children }: { children: ReactNode }) {
       hasKeys,
       needsVaultPassword,
       needsVaultSetup,
+      openVaultSetup,
       setVaultPassword,
       unlockVault,
       error,
@@ -224,6 +230,7 @@ export function UserKeysProvider({ children }: { children: ReactNode }) {
       hasKeys,
       needsVaultPassword,
       needsVaultSetup,
+      openVaultSetup,
       setVaultPassword,
       unlockVault,
       error,
