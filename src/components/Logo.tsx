@@ -1,6 +1,12 @@
+import Link from "next/link";
+
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
+    <Link
+      href="/"
+      aria-label="Notes Taker home"
+      className={`group flex items-center gap-3 rounded-xl outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 ${className}`}
+    >
       <svg
         viewBox="0 0 100 100"
         xmlns="http://www.w3.org/2000/svg"
@@ -28,6 +34,6 @@ export function Logo({ className = "" }: { className?: string }) {
       <span className="font-sans font-bold text-xl tracking-tight text-foreground">
         Notes Taker
       </span>
-    </div>
+    </Link>
   );
 }

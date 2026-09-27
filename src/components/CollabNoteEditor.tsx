@@ -9,6 +9,8 @@ import { RemoteCursors } from "./RemoteCursors";
 import { motion } from "framer-motion";
 import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
+import { NoteExport } from "./NoteExport";
+import { NoteAttachments } from "./NoteAttachments";
 import {
   computeTextDelta,
   transformSelectionForRemoteDelta,
@@ -288,6 +290,12 @@ export function CollabNoteEditor({
           )}
         </div>
       </motion.div>
+
+      <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4">
+        <summary className="cursor-pointer py-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-indigo-500">Files & export</summary>
+        <NoteExport title={title} content={cursorContent} encrypted />
+        {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} />}
+      </details>
 
       {/* Tool switch: routes the next pointer drag to text or ink. Both layers
           stay live at all times. */}

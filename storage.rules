@@ -1,0 +1,33 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function note(noteId) {
+      return firestore.get(/databases/(default)/documents/notes/$(noteId)).data;
+    }
+    function member(n) {
+      return request.auth != null && n.mode in ['secure', 'collab']
+        && (n.authorId == request.auth.uid ||
+          ('collaboratorIds' in n && request.auth.uid in n.collaboratorIds));
+    }
+    function editor(n) {
+      return member(n) && (n.authorId == request.auth.uid ||
+        !('collaboratorRoles' in n) || !(request.auth.uid in n.collaboratorRoles) ||
+        n.collaboratorRoles[request.auth.uid] == 'editor');
+    }
+    match /attachments/{noteId}/{fileId} {
+      allow read: if member(note(noteId));
+      allow create: if editor(note(noteId))
+        && fileId.matches('[a-f0-9-]{36}')
+        && request.resource.size > 16 && request.resource.size <= 10485776
+        && request.resource.contentType == 'application/octet-stream'
+        && request.resource.metadata.keys().hasOnly(['uploader', 'iv', 'label', 'labelIv'])
+        && request.resource.metadata.uploader == request.auth.uid
+        && request.resource.metadata.iv.size() == 16
+        && request.resource.metadata.labelIv.size() == 16
+        && request.resource.metadata.label.size() <= 2048;
+      allow delete: if editor(note(noteId)) &&
+        (note(noteId).authorId == request.auth.uid || resource.metadata.uploader == request.auth.uid);
+      allow update: if false;
+    }
+  }
+}

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { NoteExport } from "./NoteExport";
+import { NoteAttachments } from "./NoteAttachments";
 import {
   type Note,
   type Group,
@@ -34,8 +37,12 @@ export function ViewNoteModal({
   userId,
   privateKey,
 }: ViewNoteModalProps) {
-  const [decryptedTitle, setDecryptedTitle] = useState<string | null>(null);
-  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decrypted, setDecrypted] = useState<{
+    noteId: string; userId: string; key: CryptoKey; title: string; content: string;
+  } | null>(null);
+  const matchesNote = decrypted?.noteId === note?.id && decrypted?.userId === userId && decrypted?.key === privateKey;
+  const decryptedTitle = matchesNote ? decrypted?.title ?? null : null;
+  const decryptedContent = matchesNote ? decrypted?.content ?? null : null;
   const [decrypting, setDecrypting] = useState(false);
   const [decryptError, setDecryptError] = useState<string | null>(null);
 
@@ -44,8 +51,7 @@ export function ViewNoteModal({
     if (!note || !isSecureNote(note)) {
       // Closing or changing the note intentionally clears decrypted UI state.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDecryptedTitle(null);
-      setDecryptedContent(null);
+      setDecrypted(null);
       setDecryptError(null);
       return;
     }
@@ -57,13 +63,13 @@ export function ViewNoteModal({
 
     let cancelled = false;
     setDecrypting(true);
+    setDecrypted(null);
     setDecryptError(null);
 
     readSecureNote(note.id, userId, privateKey)
       .then(({ title, content }) => {
         if (!cancelled) {
-          setDecryptedTitle(title);
-          setDecryptedContent(content);
+          setDecrypted({ noteId: note.id, userId, key: privateKey, title, content });
         }
       })
       .catch((err) => {
@@ -179,7 +185,7 @@ export function ViewNoteModal({
             </div>
 
             {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto px-8 py-7">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-7">
               {/* Title */}
               <h2 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight break-words mb-4">
                 {displayTitle}
@@ -244,18 +250,20 @@ export function ViewNoteModal({
                       Open the collaborative editor to view and edit this note in real-time.
                     </p>
                   </div>
-                  <button
+                  <Link href={`/collab/${note.id}`}
                     className="mt-2 bg-emerald-500 text-white font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition-colors"
-                    disabled
                   >
-                    Open Editor (Coming Soon)
-                  </button>
+                    Open editor
+                  </Link>
                 </div>
               ) : (
                 <p className="text-foreground/85 leading-[1.85] whitespace-pre-wrap break-words text-lg">
                   {getNoteContent(note)}
                 </p>
               )}
+              {isNormalNote(note) && <NoteExport title={note.title} content={note.content} />}
+              {isSecureNote(note) && !decrypting && !decryptError && decryptedTitle !== null && decryptedContent !== null && <NoteExport title={decryptedTitle} content={decryptedContent} encrypted />}
+              {isSecureNote(note) && userId && privateKey && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} />}
             </div>
           </motion.div>
         </motion.div>
