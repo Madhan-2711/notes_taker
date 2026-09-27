@@ -29,7 +29,6 @@ import { db, hasValidConfig } from "../lib/firebaseConfig";
 import {
   getNoteContent,
   getNoteTitle,
-  isCollabNote,
   noteSchema,
   type CollabInvite,
   type Group,
@@ -40,6 +39,7 @@ import { createNormalNote, subscribeToNotes } from "../lib/services/notes/normal
 import { createSecureNote } from "../lib/services/notes/secureNotesService";
 import { createCollabNote } from "../lib/services/notes/collaborativeNotesService";
 import { subscribeToInvites } from "../lib/services/social/collaborationService";
+import { recentNoteHref } from "../lib/noteNavigation";
 
 const NOTE_MODES: Array<{
   value: NoteMode;
@@ -496,7 +496,7 @@ export default function Home() {
                   return (
                     <Link
                       key={note.id}
-                      href={isCollabNote(note) ? `/collab/${note.id}` : "/notes"}
+                      href={recentNoteHref(note)}
                       className="group rounded-2xl border border-border/70 bg-white/65 p-4 transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/5"
                     >
                       <div className="mb-4 flex items-center justify-between gap-3">

@@ -6,9 +6,24 @@ import { Download, Eye, Paperclip, RefreshCw, Trash2, Upload, X } from "lucide-r
 import { ATTACHMENT_ACCEPT } from "../lib/attachmentCrypto";
 import { attachmentAccess, downloadAttachment, listAttachments, removeAttachment, uploadAttachment, type Attachment } from "../lib/services/attachments";
 import { downloadBlob } from "../lib/noteExport";
+import type { Note } from "../lib/validations";
 
-export function NoteAttachments({ noteId, userId, privateKey, pickerRef }: {
-  noteId: string; userId: string; privateKey: CryptoKey; pickerRef?: RefObject<HTMLInputElement | null>;
+async function withLoadingTimeout<T>(task: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("The request timed out. Check your connection and try again.")), 12000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNote }: {
+  noteId: string; userId: string; privateKey: CryptoKey; pickerRef?: RefObject<HTMLInputElement | null>; knownNote?: Note;
 }) {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [nextPage, setNextPage] = useState<string>();
@@ -25,20 +40,27 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef }: {
   const operation = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
+  const requestId = useRef(0);
   const refresh = useCallback(async (token?: string) => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
     try {
-      const currentAccess = await attachmentAccess(noteId, userId, privateKey);
-      const page = await listAttachments(noteId, currentAccess.key, token);
-      if (!mounted.current) return;
+      const currentAccess = await withLoadingTimeout(attachmentAccess(noteId, userId, privateKey, knownNote));
+      if (!mounted.current || requestId.current !== currentRequest) return;
       setAccess(currentAccess);
+      const page = await withLoadingTimeout(listAttachments(noteId, currentAccess.key, token));
+      if (!mounted.current || requestId.current !== currentRequest) return;
       setFiles((previous) => token ? [...previous, ...page.files] : page.files);
       setNextPage(page.nextPage);
-    } catch {
-      if (mounted.current) setError("Could not load files. Check your connection and note access. If this continues, Firebase Storage may need setup.");
-    } finally { if (mounted.current) setLoading(false); }
-  }, [noteId, userId, privateKey]);
+    } catch (caught) {
+      if (mounted.current && requestId.current === currentRequest) {
+        setError(caught instanceof Error ? `Could not load attachments: ${caught.message}` : "Could not load attachments. Please try again.");
+      }
+    } finally {
+      if (mounted.current && requestId.current === currentRequest) setLoading(false);
+    }
+  }, [noteId, userId, privateKey, knownNote]);
 
   useEffect(() => {
     mounted.current = true;
@@ -46,6 +68,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef }: {
     return () => {
       window.clearTimeout(timer);
       mounted.current = false;
+      requestId.current += 1;
       controller.current?.abort();
       if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     };
@@ -119,12 +142,12 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef }: {
         <p className="mt-1 text-xs leading-5 text-slate-600">Encrypted before upload. Up to 10 MB per file.</p></div>
       <button type="button" className={buttonStyle} disabled={loading || busy} onClick={() => void refresh()} aria-label="Refresh attachments"><RefreshCw size={16} /></button>
     </div>
-    {access?.editor && <div className="mt-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 text-center"
+    {(access?.editor || !access) && <div className="mt-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 text-center"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => { event.preventDefault(); if (event.dataTransfer.files.length > 1) setError("Please upload one file at a time."); else void upload(event.dataTransfer.files[0]); }}>
-      <input ref={(node) => { input.current = node; if (pickerRef) pickerRef.current = node; }} type="file" className="sr-only" tabIndex={-1} aria-label="Choose attachment" accept={ATTACHMENT_ACCEPT} disabled={busy || loading} onChange={(event) => void upload(event.target.files?.[0])} />
-      <button type="button" className={buttonStyle} disabled={busy || loading} onClick={() => input.current?.click()}><Upload size={16} /> Add image or file</button>
-      <p className="mt-2 text-xs text-slate-600">Or drop an image, PDF, text or Office document here</p>
+      <input ref={(node) => { input.current = node; if (pickerRef) pickerRef.current = node; }} type="file" className="sr-only" tabIndex={-1} aria-label="Choose attachment" accept={ATTACHMENT_ACCEPT} disabled={busy || !access?.editor} onChange={(event) => void upload(event.target.files?.[0])} />
+      <button type="button" className={buttonStyle} disabled={busy || !access?.editor} onClick={() => input.current?.click()}><Upload size={16} /> Add image or file</button>
+      <p className="mt-2 text-xs text-slate-600">{access?.editor ? "Or drop an image, PDF, text or Office document here" : error ? "Upload access could not be checked. Use refresh to retry." : "Checking upload access…"}</p>
     </div>}
     {progress !== null && <div className="mt-4 flex items-center gap-3"><progress className="h-2 min-w-0 flex-1 accent-indigo-500" value={progress} max={100} aria-label="Upload progress" /><span className="text-xs">{progress}%</span><button type="button" className={buttonStyle} onClick={() => controller.current?.abort()} aria-label="Cancel upload"><X size={16} /></button></div>}
     <div role="status" className="mt-3 text-sm text-slate-600">{loading ? "Loading attachments…" : message || (!files.length && !error ? "No attachments yet." : "")}</div>

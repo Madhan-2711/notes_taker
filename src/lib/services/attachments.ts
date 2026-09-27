@@ -4,18 +4,18 @@ import { app, db } from "../firebaseConfig";
 import { decryptKeyFromUser } from "./crypto/sharing";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./crypto/serialization";
 import { MAX_ATTACHMENT_BYTES, validateAttachment, sealAttachment, openAttachment } from "../attachmentCrypto";
+import { isCollabNote, isSecureNote, type Note } from "../validations";
 
 function storage() {
   if (!app?.options.storageBucket) throw new Error("File storage is not configured yet. Contact the workspace owner.");
   return getStorage(app);
 }
 
-export async function attachmentAccess(noteId: string, uid: string, privateKey: CryptoKey) {
-  const snapshot = await getDoc(doc(db, "notes", noteId));
-  const note = snapshot.data();
-  if (!note || !["secure", "collab"].includes(note.mode) || !note.encryptedKeys?.[uid]) throw new Error("You no longer have access to this note.");
+export async function attachmentAccess(noteId: string, uid: string, privateKey: CryptoKey, knownNote?: Note) {
+  const note = knownNote?.id === noteId ? knownNote : (await getDoc(doc(db, "notes", noteId))).data() as Note | undefined;
+  if (!note || (!isSecureNote(note) && !isCollabNote(note)) || !note.encryptedKeys?.[uid]) throw new Error("You no longer have access to this note.");
   const owner = note.authorId === uid;
-  const editor = owner || (note.collaboratorIds?.includes(uid) && (note.collaboratorRoles?.[uid] ?? "editor") === "editor");
+  const editor = owner || (isCollabNote(note) && note.collaboratorIds?.includes(uid) && (note.collaboratorRoles?.[uid] ?? "editor") === "editor");
   return { key: await decryptKeyFromUser(note.encryptedKeys[uid], privateKey), owner, editor: Boolean(editor) };
 }
 

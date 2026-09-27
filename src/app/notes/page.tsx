@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
 import { hasValidConfig } from "../../lib/firebaseConfig";
 import { db } from "../../lib/firebaseConfig";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { type Note, type Group, type NoteMode } from "../../lib/validations";
+import { type Note, type Group, type NoteMode, isCollabNote } from "../../lib/validations";
 import {
   subscribeToNotes,
   updateNormalNote,
@@ -18,6 +18,7 @@ import { ViewNoteModal } from "../../components/ViewNoteModal";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Calendar, X, FolderOpen, Lock, Unlock, Users, Layers } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const MODE_FILTERS: { value: NoteMode | ""; label: string; icon: typeof Lock }[] = [
   { value: "", label: "All", icon: Layers },
@@ -27,6 +28,16 @@ const MODE_FILTERS: { value: NoteMode | ""; label: string; icon: typeof Lock }[]
 ];
 
 export default function NotesPage() {
+  return (
+    <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" /></div>}>
+      <NotesPageContent />
+    </Suspense>
+  );
+}
+
+function NotesPageContent() {
+  const router = useRouter();
+  const linkedNoteId = useSearchParams().get("open");
   const { user, loading } = useAuth();
   const { privateKey } = useUserKeys();
   const [notes, setNotes] = useState<Note[]>([]);
@@ -36,6 +47,17 @@ export default function NotesPage() {
   const [modeFilter, setModeFilter] = useState<NoteMode | "">("");
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
+  const [dismissedLinkedId, setDismissedLinkedId] = useState<string | null>(null);
+  const linkedNote = linkedNoteId && dismissedLinkedId !== linkedNoteId
+    ? notes.find((note) => note.id === linkedNoteId && !isCollabNote(note)) ?? null
+    : null;
+  const activeViewNote = viewingNote ?? linkedNote;
+
+  const clearLinkedNote = () => {
+    if (!linkedNoteId) return;
+    setDismissedLinkedId(linkedNoteId);
+    router.replace("/notes", { scroll: false });
+  };
 
   // Subscribe to notes via service
   useEffect(() => {
@@ -166,11 +188,13 @@ export default function NotesPage() {
           {MODE_FILTERS.map(({ value, label, icon: Icon }) => (
             <button
               key={value}
-              onClick={() => setModeFilter(modeFilter === value ? "" : value)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 ${
+              type="button"
+              onClick={() => setModeFilter(value)}
+              aria-pressed={modeFilter === value}
+              className={`flex min-h-10 items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
                 modeFilter === value
-                  ? "bg-foreground text-background border-foreground"
-                  : "bg-transparent text-foreground/50 border-border/60 hover:border-foreground/40 hover:text-foreground"
+                  ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
               }`}
             >
               <Icon size={12} />
@@ -273,10 +297,10 @@ export default function NotesPage() {
       />
 
       <ViewNoteModal
-        note={viewingNote}
+        note={activeViewNote}
         groups={groups}
-        onClose={() => setViewingNote(null)}
-        onEdit={(note) => { setViewingNote(null); setEditingNote(note); }}
+        onClose={() => { setViewingNote(null); clearLinkedNote(); }}
+        onEdit={(note) => { setViewingNote(null); clearLinkedNote(); setEditingNote(note); }}
         userId={user?.uid}
         privateKey={privateKey}
       />

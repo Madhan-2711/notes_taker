@@ -260,7 +260,7 @@ export function EditNoteModal({
 
                 {isSecureNote(note) && userId && privateKey && (
                   <div ref={attachmentsRef} className="scroll-mt-4">
-                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} pickerRef={attachmentPickerRef} />
+                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} pickerRef={attachmentPickerRef} knownNote={note} />
                     <p className="text-xs leading-5 text-foreground/50">Images appear with this note as encrypted attachments. They upload immediately, even if you close this editor without saving text changes.</p>
                   </div>
                 )}

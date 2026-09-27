@@ -263,7 +263,7 @@ export function ViewNoteModal({
               )}
               {isNormalNote(note) && <NoteExport title={note.title} content={note.content} />}
               {isSecureNote(note) && !decrypting && !decryptError && decryptedTitle !== null && decryptedContent !== null && <NoteExport title={decryptedTitle} content={decryptedContent} encrypted />}
-              {isSecureNote(note) && userId && privateKey && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} />}
+              {isSecureNote(note) && userId && privateKey && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} knownNote={note} />}
             </div>
           </motion.div>
         </motion.div>
