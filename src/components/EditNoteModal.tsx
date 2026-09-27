@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   type Note,
   type Group,
@@ -12,8 +12,9 @@ import {
 import { ModeBadge } from "./ModeBadge";
 import { readSecureNote, updateSecureNote } from "../lib/services/notes/secureNotesService";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, FolderOpen, Lock, Users, Loader2 } from "lucide-react";
+import { X, Check, FolderOpen, ImagePlus, Lock, Users, Loader2 } from "lucide-react";
 import { setNoteGroupIds } from "../lib/groupsService";
+import { NoteAttachments } from "./NoteAttachments";
 
 interface EditNoteModalProps {
   note: Note | null;
@@ -41,15 +42,23 @@ export function EditNoteModal({
   const [saving, setSaving] = useState(false);
   const [decrypting, setDecrypting] = useState(false);
   const [decryptError, setDecryptError] = useState<string | null>(null);
+  const [decryptedForNote, setDecryptedForNote] = useState<string | null>(null);
+  const attachmentsRef = useRef<HTMLDivElement>(null);
+  const attachmentPickerRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!note) return;
+    let cancelled = false;
 
     // Opening a different note intentionally replaces the modal's draft state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedGroupIds(note.groupIds ?? []);
     setError(null);
     setDecryptError(null);
+    setDecryptedForNote(null);
+    setTitle("");
+    setContent("");
+    setDecrypting(false);
 
     if (isNormalNote(note)) {
       setTitle(note.title);
@@ -59,17 +68,23 @@ export function EditNoteModal({
       setDecrypting(true);
       readSecureNote(note.id, userId, privateKey)
         .then(({ title: t, content: c }) => {
-          setTitle(t);
-          setContent(c);
+          if (!cancelled) {
+            setTitle(t);
+            setContent(c);
+            setDecryptedForNote(note.id);
+          }
         })
         .catch((err) => {
-          setDecryptError(err instanceof Error ? err.message : "Failed to decrypt note");
+          if (!cancelled) setDecryptError(err instanceof Error ? err.message : "Failed to decrypt note");
         })
-        .finally(() => setDecrypting(false));
+        .finally(() => { if (!cancelled) setDecrypting(false); });
+    } else if (isSecureNote(note)) {
+      setDecryptError("Unlock your vault to edit this secure note.");
     } else {
       setTitle("");
       setContent("");
     }
+    return () => { cancelled = true; };
   }, [note, userId, privateKey]);
 
   const handleToggleGroup = (groupId: string) => {
@@ -107,7 +122,7 @@ export function EditNoteModal({
   };
 
   const isEditable = note
-    ? isNormalNote(note) || (isSecureNote(note) && !decrypting && !decryptError)
+    ? isNormalNote(note) || (isSecureNote(note) && decryptedForNote === note.id && !decrypting && !decryptError)
     : false;
 
   return (
@@ -117,7 +132,7 @@ export function EditNoteModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5"
           onClick={onClose}
         >
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
@@ -129,18 +144,32 @@ export function EditNoteModal({
             transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSave}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-8 w-full max-w-lg flex flex-col gap-5 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="relative flex h-[min(94dvh,960px)] w-full max-w-5xl flex-col overflow-hidden rounded-[var(--radius-xl)] border-2 border-slate-900 bg-white shadow-2xl"
           >
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4 py-4 sm:px-8">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-bold tracking-tight">Edit Note</h2>
                 <ModeBadge mode={note.mode || "normal"} />
               </div>
-              <button type="button" onClick={onClose} className="text-foreground/40 hover:text-foreground transition-colors p-1">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                {isSecureNote(note) && isEditable && (
+                  <button type="button" onClick={() => {
+                    if (attachmentPickerRef.current && !attachmentPickerRef.current.disabled) attachmentPickerRef.current.click();
+                    else attachmentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-200 px-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-500">
+                    <ImagePlus size={17} /> <span className="hidden sm:inline">Add image or file</span>
+                    <span className="sr-only sm:hidden">Add image or file</span>
+                  </button>
+                )}
+                <button type="button" onClick={onClose} className="rounded-xl p-2 text-foreground/40 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-indigo-500" aria-label="Close editor">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
+
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-8 sm:py-7">
 
             {/* Decrypting state */}
             {isSecureNote(note) && decrypting && (
@@ -191,8 +220,9 @@ export function EditNoteModal({
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    className="w-full bg-transparent min-h-[140px] resize-none focus:outline-none placeholder:text-foreground/25 leading-relaxed"
+                    className="min-h-[38dvh] w-full resize-y rounded-xl border border-border/70 bg-slate-50/40 p-4 text-base leading-7 outline-none transition-colors placeholder:text-foreground/25 focus:border-primary focus:bg-white sm:min-h-[48dvh] sm:p-5"
                   />
+                  <p className="mt-1 text-right text-xs text-foreground/40">{content.length.toLocaleString()} / 5,000 characters</p>
                 </div>
 
                 {groups.length > 0 && (
@@ -228,11 +258,23 @@ export function EditNoteModal({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-4 border-t border-border/30">
-                  <div className="flex-1">
-                    {error && <span className="text-sm text-red-500 font-medium">{error}</span>}
+                {isSecureNote(note) && userId && privateKey && (
+                  <div ref={attachmentsRef} className="scroll-mt-4">
+                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} pickerRef={attachmentPickerRef} />
+                    <p className="text-xs leading-5 text-foreground/50">Images appear with this note as encrypted attachments. They upload immediately, even if you close this editor without saving text changes.</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                )}
+
+              </>
+            )}
+            </div>
+
+            {isEditable && !decrypting && (
+                <div className="flex shrink-0 flex-col gap-2 border-t border-border/50 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+                  <div className="min-w-0 flex-1">
+                    {error && <span role="alert" className="text-sm text-red-500 font-medium">{error}</span>}
+                  </div>
+                  <div className="flex items-center justify-end gap-3">
                     <button type="button" onClick={onClose} className="px-5 py-2 text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
                       Cancel
                     </button>
@@ -246,12 +288,11 @@ export function EditNoteModal({
                     </button>
                   </div>
                 </div>
-              </>
             )}
 
             {/* Close button for non-editable modes */}
             {(!isEditable || decrypting) && !isEditable && (
-              <div className="flex justify-end pt-4 border-t border-border/30">
+              <div className="flex shrink-0 justify-end border-t border-border/50 px-4 py-3 sm:px-8">
                 <button type="button" onClick={onClose} className="px-5 py-2 text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
                   Close
                 </button>
