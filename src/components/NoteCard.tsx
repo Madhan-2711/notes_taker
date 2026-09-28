@@ -68,8 +68,6 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
 
   // Disable edit for collab notes (those use the Yjs editor)
   const canEdit = !isCollabNote(note);
-  const hasBadge = !!note.mode && note.mode !== "normal";
-
   return (
     <motion.article
       initial={{ opacity: 0, y: 20 }}
@@ -85,7 +83,7 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
         aria-label={`Open ${displayTitle}`}
         onClick={() => isCollabNote(note) ? router.push(`/collab/${note.id}`) : onView?.(note)}
       />
-      <div className={`flex items-center justify-between gap-2 min-h-11 sm:min-h-0 ${hasBadge ? "" : "sm:contents"}`}>
+      <div className="flex items-center justify-between gap-2 min-h-11 sm:min-h-5">
         <ModeBadge mode={note.mode || "normal"} compact />
         {/* Always visible on mobile, hover-reveal on desktop */}
         <div className="relative z-20 ml-auto flex items-center gap-1 sm:absolute sm:top-3 sm:right-3 sm:rounded-xl sm:bg-white/95 sm:shadow-sm sm:backdrop-blur sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
