@@ -6,7 +6,7 @@
  * stay live at all times — this only routes the next drag.
  */
 
-import { Type, Pen, Brush, Highlighter, Eraser, Undo2, Redo2 } from "lucide-react";
+import { Type, Move, Pen, Brush, Highlighter, Eraser, Undo2, Redo2 } from "lucide-react";
 import { DEFAULT_COLORS, isPenTool, type DrawTool } from "../lib/drawing";
 
 interface DrawingToolbarProps {
@@ -23,6 +23,7 @@ interface DrawingToolbarProps {
 
 const TOOLS: { value: DrawTool; label: string; Icon: typeof Type }[] = [
   { value: "text", label: "Text", Icon: Type },
+  { value: "move", label: "Move pictures", Icon: Move },
   { value: "pen", label: "Pen", Icon: Pen },
   { value: "marker", label: "Marker", Icon: Brush },
   { value: "highlighter", label: "Highlighter", Icon: Highlighter },

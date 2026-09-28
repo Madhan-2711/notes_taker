@@ -29,6 +29,7 @@ import { encryptData } from "../lib/services/crypto/encrypt";
 import { decryptData } from "../lib/services/crypto/decrypt";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "../lib/services/crypto/serialization";
 import type { Stroke } from "../lib/drawing";
+import type { FloatingImage } from "../lib/floatingImages";
 import { addRevisionToBatch } from "../lib/services/noteRevisions";
 import { auth } from "../lib/firebaseConfig";
 
@@ -39,6 +40,8 @@ interface UseCollabEditorReturn {
    * change flows through the same encrypted note_updates pipeline as the text.
    */
   strokes: Y.Map<Stroke> | null;
+  /** Pictures placed freely on the board, keyed by attachment id. */
+  images: Y.Map<FloatingImage> | null;
   title: string;
   isLoading: boolean;
   isSynced: boolean;
@@ -59,6 +62,7 @@ export function useCollabEditor(
 ): UseCollabEditorReturn {
   const [text, setText] = useState<Y.Text | null>(null);
   const [strokes, setStrokes] = useState<Y.Map<Stroke> | null>(null);
+  const [images, setImages] = useState<Y.Map<FloatingImage> | null>(null);
   const [title, setTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSynced, setIsSynced] = useState(false);
@@ -114,6 +118,7 @@ export function useCollabEditor(
         // the exact same encrypted pipeline as text — no extra wiring needed.
         const ystrokes = ydoc.getMap<Stroke>("strokes");
         setStrokes(ystrokes);
+        setImages(ydoc.getMap<FloatingImage>("images"));
 
         const scheduleFlush = (delay = DEBOUNCE_MS) => {
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -272,7 +277,7 @@ export function useCollabEditor(
     }
   }, [noteId, canCompact]);
 
-  return { text, strokes, title, isLoading, isSynced, error, canEdit, canCompact, saveSnapshot };
+  return { text, strokes, images, title, isLoading, isSynced, error, canEdit, canCompact, saveSnapshot };
 }
 
 /** Save a full encrypted snapshot and clean up processed updates. */

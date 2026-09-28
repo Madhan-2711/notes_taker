@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run tests/textDelta.test.ts tests/crypto.keys.test.ts tests/drawing.test.ts tests/attachments.test.ts tests/noteNavigation.test.ts tests/inlineImages.test.ts tests/seo.test.ts",
+    "test": "vitest run tests/textDelta.test.ts tests/crypto.keys.test.ts tests/drawing.test.ts tests/attachments.test.ts tests/noteNavigation.test.ts tests/inlineImages.test.ts tests/floatingImages.test.ts tests/seo.test.ts",
     "test:storage": "firebase emulators:exec --project demo-attachments --only firestore,storage \"vitest run tests/storage.rules.test.ts\"",
     "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/firestore.rules.test.ts\""
   },
@@ -18,10 +18,13 @@
     "idb-keyval": "^6.2.4",
     "lucide-react": "^1.8.0",
     "next": "16.2.4",
+    "quill": "^2.0.3",
+    "quill-cursors": "^4.3.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.5.0",
     "y-protocols": "^1.0.7",
+    "y-quill": "^1.0.0",
     "yjs": "^13.6.30",
     "zod": "^4.3.6"
   },

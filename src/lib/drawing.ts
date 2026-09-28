@@ -18,7 +18,7 @@ export const MAX_STROKE_POINTS = 1_024;
 export const MAX_TOTAL_STROKE_POINTS = 12_000;
 export const MIN_POINT_DISTANCE = 1.5;
 
-export type DrawTool = "text" | "pen" | "marker" | "highlighter" | "eraser";
+export type DrawTool = "text" | "move" | "pen" | "marker" | "highlighter" | "eraser";
 
 /** A pen-type tool actually lays down ink. */
 export type PenTool = "pen" | "marker" | "highlighter";

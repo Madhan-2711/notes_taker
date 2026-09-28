@@ -156,7 +156,7 @@ export function DrawingCanvas({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (!canEdit || !strokes || toolRef.current === "text") return;
+      if (!canEdit || !strokes || !(isPenTool(toolRef.current) || toolRef.current === "eraser")) return;
       e.preventDefault();
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
       drawingRef.current = true;
@@ -218,7 +218,7 @@ export function DrawingCanvas({
     scheduleRender();
   }, [strokes, authorId, scheduleRender, sortedStrokes, onLimitReached]);
 
-  const active = canEdit && tool !== "text";
+  const active = canEdit && (isPenTool(tool) || tool === "eraser");
 
   return (
     <canvas

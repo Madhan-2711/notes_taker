@@ -5,7 +5,6 @@ import * as Y from "yjs";
 import { useCollabEditor } from "../hooks/useCollabEditor";
 import { usePresence } from "../hooks/usePresence";
 import { PresenceIndicator } from "./PresenceIndicator";
-import { RemoteCursors } from "./RemoteCursors";
 import { motion } from "framer-motion";
 import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
@@ -13,13 +12,10 @@ import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
 import { NoteComments } from "./NoteComments";
 import { CollabHistory } from "./CollabHistory";
-import { InlineNoteContent } from "./InlineNoteContent";
-import { imageToken } from "../lib/inlineImages";
 import type { Attachment } from "../lib/services/attachments";
-import {
-  computeTextDelta,
-  transformSelectionForRemoteDelta,
-} from "../lib/textDelta";
+import { CollabRichText } from "./CollabRichText";
+import { FloatingImageLayer } from "./FloatingImageLayer";
+import { DEFAULT_IMAGE_WIDTH, clampImage, migrateLegacyImageTokens } from "../lib/floatingImages";
 import { DrawingCanvas } from "./DrawingCanvas";
 import { DrawingToolbar } from "./DrawingToolbar";
 import {
@@ -51,6 +47,7 @@ export function CollabNoteEditor({
   const {
     text,
     strokes,
+    images,
     title,
     isLoading,
     isSynced,
@@ -62,8 +59,7 @@ export function CollabNoteEditor({
 
   const [saving, setSaving] = useState(false);
   const [checkpointError, setCheckpointError] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isLocalChangeRef = useRef(false);
+  const [toolbarContainer, setToolbarContainer] = useState<HTMLDivElement | null>(null);
 
   // Drawing layer state: which tool is active and its color/size.
   const [tool, setTool] = useState<DrawTool>("text");
@@ -81,113 +77,50 @@ export function CollabNoteEditor({
   // Undo/redo scoped to this user's own strokes.
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
 
-  // Track content in a ref to avoid React re-render on remote updates
-  const contentRef = useRef("");
-  const [cursorContent, setCursorContent] = useState("");
+  // Plain-text copy of the shared text for export.
+  const [plainText, setPlainText] = useState("");
 
   // Presence tracking with cursor
   const { activeUsers, updateCursor } = usePresence(noteId, userId, displayName, photoURL);
 
-  // Sync Yjs text to textarea — bypass React state to avoid cursor jumping
   useEffect(() => {
     if (!text) return;
-
-    // Set initial content
-    const initial = text.toString();
-    contentRef.current = initial;
-    const initialContentTimer = setTimeout(() => setCursorContent(initial), 0);
-    if (textareaRef.current) {
-      textareaRef.current.value = initial;
-    }
-
-    const observer = (event: Y.YTextEvent) => {
-      if (isLocalChangeRef.current) {
-        isLocalChangeRef.current = false;
-        return;
-      }
-
-      // Remote change — update textarea directly (no React setState)
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-
-      const prevCursor = textarea.selectionStart;
-      const prevSelEnd = textarea.selectionEnd;
-      const selectionDirection = textarea.selectionDirection;
-      const adjustedSelection = transformSelectionForRemoteDelta(
-        prevCursor,
-        prevSelEnd,
-        event.delta
-      );
-
-      // Directly set textarea value (bypass React render cycle)
-      const newContent = text.toString();
-      contentRef.current = newContent;
-      setCursorContent(newContent);
-      textarea.value = newContent;
-
-      // Immediately restore cursor — no requestAnimationFrame needed
-      const clamp = (v: number) => Math.max(0, Math.min(v, textarea.value.length));
-      const adjustedCursor = clamp(adjustedSelection.start);
-      const adjustedSelEnd = clamp(adjustedSelection.end);
-      textarea.setSelectionRange(
-        adjustedCursor,
-        adjustedSelEnd,
-        selectionDirection
-      );
-      updateCursor(adjustedSelEnd);
-    };
-
-    text.observe(observer);
+    const sync = () => setPlainText(text.toString());
+    const timer = setTimeout(sync, 0);
+    text.observe(sync);
     return () => {
-      clearTimeout(initialContentTimer);
-      text.unobserve(observer);
+      clearTimeout(timer);
+      text.unobserve(sync);
     };
-  }, [text, updateCursor]);
+  }, [text]);
 
-  // Handle local text changes
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      if (!text) return;
-
-      const newValue = e.target.value;
-      const oldValue = contentRef.current;
-      isLocalChangeRef.current = true;
-
-      const delta = computeTextDelta(oldValue, newValue);
-
-      text.doc?.transact(() => {
-        if (delta.deleteCount > 0) text.delete(delta.start, delta.deleteCount);
-        if (delta.insertText) text.insert(delta.start, delta.insertText);
-      });
-
-      contentRef.current = newValue;
-      setCursorContent(newValue);
-
-      // Publish cursor position
-      updateCursor(e.target.selectionEnd);
-    },
-    [text, updateCursor]
-  );
-
-  // Track cursor movement (click, arrow keys)
-  const handleCursorChange = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      updateCursor(textarea.selectionStart);
-    }
-  }, [updateCursor]);
+  // Older versions stored pictures as tokens inside the text; move them onto the board.
+  useEffect(() => {
+    if (!text || !images || !canEdit) return;
+    migrateLegacyImageTokens(text, images, userId);
+    const onRemote = (_event: Y.YTextEvent, transaction: Y.Transaction) => {
+      if (transaction.local) return;
+      if (text.toString().includes("(attachment:")) migrateLegacyImageTokens(text, images, userId);
+    };
+    text.observe(onRemote);
+    return () => text.unobserve(onRemote);
+  }, [text, images, canEdit, userId]);
 
   const insertImage = useCallback((file: Attachment) => {
-    if (!text || !canEdit) return;
-    const position = textareaRef.current?.selectionStart ?? text.length;
-    const token = `\n${imageToken(file)}\n`;
-    text.insert(position, token);
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(position + token.length, position + token.length);
-      updateCursor(position + token.length);
-    });
-  }, [text, canEdit, updateCursor]);
+    const id = file.path.split("/").pop();
+    if (!images || !canEdit || !id || !/^[a-zA-Z0-9]{1,80}$/.test(id)) return;
+    const width = Math.min(DEFAULT_IMAGE_WIDTH, BOARD_WIDTH - 80);
+    images.set(id, clampImage({
+      id,
+      alt: file.name.replace(/[\[\]\n]/g, " ").slice(0, 120),
+      x: (BOARD_WIDTH - width) / 2,
+      y: editorScrollTop + 120,
+      width,
+      authorId: userId,
+      createdAt: Date.now(),
+    }));
+    setTool("move");
+  }, [images, canEdit, userId, editorScrollTop]);
 
   // Fit the fixed-size board into the available width. Re-runs once the board
   // mounts (after loading), so the ref is attached before we measure.
@@ -206,13 +139,13 @@ export function CollabNoteEditor({
   // results still publish to everyone through the normal update pipeline.
   useEffect(() => {
     if (!strokes) return;
-    const um = new Y.UndoManager(strokes, { captureTimeout: 250 });
+    const um = new Y.UndoManager(images ? [strokes, images] : [strokes], { captureTimeout: 250 });
     undoManagerRef.current = um;
     return () => {
       um.destroy();
       undoManagerRef.current = null;
     };
-  }, [strokes]);
+  }, [strokes, images]);
 
   const selectTool = useCallback((next: DrawTool) => {
     setTool(next);
@@ -316,15 +249,18 @@ export function CollabNoteEditor({
 
       <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4">
         <summary className="cursor-pointer py-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-indigo-500">Files & export</summary>
-        <NoteExport title={title} content={cursorContent} encrypted />
+        <NoteExport title={title} content={plainText} encrypted />
         {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} onInsertImage={canEdit ? insertImage : undefined} />}
       </details>
-      {cursorContent.includes("(attachment:") && <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3"><summary className="min-h-11 cursor-pointer text-sm font-bold text-slate-800">Preview images in note</summary><InlineNoteContent content={cursorContent} noteId={noteId} userId={userId} privateKey={privateKey} /></details>}
       <NoteComments noteId={noteId} userId={userId} userName={displayName} privateKey={privateKey} />
       {canCompact && <CollabHistory noteId={noteId} userId={userId} privateKey={privateKey} />}
 
       {/* Tool switch: routes the next pointer drag to text or ink. Both layers
           stay live at all times. */}
+      <div
+        ref={setToolbarContainer}
+        className={`collab-toolbar glass neubrutal mb-3 rounded-2xl p-1.5 sm:p-2 ${canEdit && tool === "text" ? "" : "hidden"}`}
+      />
       {canEdit && (
         <div className="mb-4 flex justify-center">
           <DrawingToolbar
@@ -367,27 +303,27 @@ export function CollabNoteEditor({
               transformOrigin: "top left",
             }}
           >
-            <textarea
-              ref={textareaRef}
-              defaultValue=""
-              onChange={handleChange}
-              onSelect={handleCursorChange}
-              onKeyUp={handleCursorChange}
-              onClick={handleCursorChange}
-              onScroll={(event) => setEditorScrollTop(event.currentTarget.scrollTop)}
-              placeholder="Start collaborating..."
-              readOnly={!canEdit || tool !== "text"}
-              className="absolute inset-0 h-full w-full resize-none bg-transparent p-10 leading-relaxed text-foreground/85 placeholder:text-foreground/25 focus:outline-none"
-              style={{ fontSize: "18px", lineHeight: "1.9em" }}
+            {/* Pictures sit under the text and ink so both can go on top of them. */}
+            <FloatingImageLayer
+              images={images}
+              noteId={noteId}
+              userId={userId}
+              privateKey={privateKey}
+              movable={canEdit && tool === "move"}
+              scrollTop={editorScrollTop}
             />
 
-            {/* Remote text cursors (pointer-events off so they never block input) */}
-            <div className="pointer-events-none absolute inset-0">
-              <RemoteCursors
-                users={activeUsers}
-                content={cursorContent}
-                textareaRef={textareaRef}
-              />
+            <div className={tool === "text" ? "" : "pointer-events-none"}>
+              {text && (
+                <CollabRichText
+                  text={text}
+                  editable={canEdit && tool === "text"}
+                  toolbarContainer={toolbarContainer}
+                  remoteUsers={activeUsers}
+                  onCursorChange={updateCursor}
+                  onScroll={setEditorScrollTop}
+                />
+              )}
             </div>
 
             {/* Ink layer on top; captures pointer only when a draw tool is on. */}

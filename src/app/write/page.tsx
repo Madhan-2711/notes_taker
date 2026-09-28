@@ -152,7 +152,7 @@ export default function WritePage() {
         }
         if (uploadedImageTokens.current.length && !imageTokensApplied.current) {
           setSaveStage("Placing images in note…");
-          if (noteMode === "collab" && privateKey) await appendImagesToCollabNote(newNoteId, user.uid, privateKey, validData.content, uploadedImageTokens.current);
+          if (noteMode === "collab" && privateKey) await appendImagesToCollabNote(newNoteId, user.uid, privateKey, uploadedImageTokens.current);
           else {
             const body = `${validData.content}\n\n${uploadedImageTokens.current.join("\n\n")}`;
             if (body.length > 5000) throw new Error("The note is too long to place its images. Shorten the text and retry; your uploaded files are safe.");

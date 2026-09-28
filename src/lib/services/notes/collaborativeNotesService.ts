@@ -25,6 +25,8 @@ import { encryptKeyForUser, decryptKeyFromUser } from "../crypto/sharing";
 import { addNotesToGroup } from "../../groupsService";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "../crypto/serialization";
 import * as Y from "yjs";
+import { clampImage, DEFAULT_IMAGE_WIDTH, type FloatingImage } from "../../floatingImages";
+import { parseNoteParts } from "../../inlineImages";
 import type { CollabRole } from "../../validations";
 import { deleteAllAttachments } from "../attachments";
 import { addRevisionToBatch, deleteAllRevisions } from "../noteRevisions";
@@ -156,16 +158,20 @@ export async function loadCollabNote(
   };
 }
 
-/** Place images uploaded during creation into the encrypted shared document. */
-export async function appendImagesToCollabNote(noteId: string, userId: string, privateKey: CryptoKey, content: string, tokens: string[]) {
+/** Place images uploaded during creation on the encrypted shared board. */
+export async function appendImagesToCollabNote(noteId: string, userId: string, privateKey: CryptoKey, tokens: string[]) {
   if (!tokens.length) return;
   const { ydoc, noteKey } = await loadCollabNote(noteId, userId, privateKey);
   try {
+    const images = ydoc.getMap<FloatingImage>("images");
     const text = ydoc.getText("content");
-    const addition = `\n\n${tokens.join("\n\n")}`;
-    if (content.length + addition.length > 5000) throw new Error("The note is too long to place its images. Shorten the text and retry; your uploaded files are safe.");
-    text.delete(0, text.length);
-    text.insert(0, content + addition);
+    const firstFreeLine = text.toString().split("\n").length + 1;
+    let y = 40 + firstFreeLine * 18 * 1.9;
+    for (const part of parseNoteParts(tokens.join("\n"))) {
+      if (part.kind !== "image" || images.has(part.id)) continue;
+      images.set(part.id, clampImage({ id: part.id, alt: part.alt, x: 40, y, width: DEFAULT_IMAGE_WIDTH, authorId: userId, createdAt: Date.now() }));
+      y += DEFAULT_IMAGE_WIDTH * 0.75 + 40;
+    }
     const snapshot = Y.encodeStateAsUpdate(ydoc);
     const encrypted = await encryptData(arrayBufferToBase64(snapshot.buffer), noteKey);
     const noteRef = doc(db, "notes", noteId);

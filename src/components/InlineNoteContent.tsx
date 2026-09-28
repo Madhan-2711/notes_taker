@@ -1,29 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
-import { attachmentAccess, downloadAttachment } from "../lib/services/attachments";
+import { useAttachmentImageUrl } from "../hooks/useAttachmentImageUrl";
 import { parseNoteParts } from "../lib/inlineImages";
 
 function InlineImage({ noteId, userId, privateKey, id, alt }: { noteId: string; userId: string; privateKey: CryptoKey | null; id: string; alt: string }) {
-  const [url, setUrl] = useState("");
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    let active = true;
-    let objectUrl = "";
-    void (async () => {
-      try {
-        const { key } = await attachmentAccess(noteId, userId, privateKey);
-        const blob = await downloadAttachment({ path: `notes/${noteId}/attachments/${id}`, name: alt, size: 0, uploader: "" }, key);
-        if (!active) return;
-        objectUrl = URL.createObjectURL(new Blob([blob], { type: "image/webp" }));
-        setUrl(objectUrl);
-      } catch {
-        if (active) setError(true);
-      }
-    })();
-    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [noteId, userId, privateKey, id, alt]);
+  const { url, error } = useAttachmentImageUrl(noteId, userId, privateKey, id, alt);
 
   return <figure className="my-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2">
     {url ? <Image src={url} alt={alt || "Note image"} width={1200} height={800} unoptimized className="mx-auto max-h-[65dvh] w-auto max-w-full object-contain" />
