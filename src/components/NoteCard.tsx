@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   type Note,
@@ -13,6 +13,9 @@ import {
 import { ModeBadge } from "./ModeBadge";
 import { Trash2, Pencil, Eye, Users, Pin } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../hooks/useAuth";
+import { useUserKeysContext } from "../contexts/UserKeysContext";
+import { decryptNoteTitle } from "../lib/services/notes/noteTitles";
 
 interface NoteCardProps {
   note: Note;
@@ -28,6 +31,18 @@ interface NoteCardProps {
 export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true }: NoteCardProps) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { user } = useAuth();
+  const { privateKey } = useUserKeysContext();
+  const [decrypted, setDecrypted] = useState<{ id: string; title: string } | null>(null);
+
+  useEffect(() => {
+    if (!user || !privateKey || (!isSecureNote(note) && !isCollabNote(note))) return;
+    let cancelled = false;
+    void decryptNoteTitle(note, user.uid, privateKey).then((title) => {
+      if (!cancelled && title) setDecrypted({ id: note.id, title });
+    });
+    return () => { cancelled = true; };
+  }, [note, user, privateKey]);
 
   // Derive groups this note belongs to
   const noteGroups = groups.filter((g) => note.groupIds?.includes(g.id));
@@ -42,8 +57,7 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
     }
   };
 
-  // Display title — encrypted notes show a placeholder
-  const displayTitle = getNoteTitle(note);
+  const displayTitle = (decrypted?.id === note.id && decrypted.title.trim()) || getNoteTitle(note);
 
   // Display content — encrypted notes show a placeholder, collab notes show collaborator info
   const displayContent = isSecureNote(note)
@@ -70,15 +84,10 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
         aria-label={`Open ${displayTitle}`}
         onClick={() => isCollabNote(note) ? router.push(`/collab/${note.id}`) : onView?.(note)}
       />
-      <div className="flex justify-between items-start gap-4">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <h3 className="font-bold text-lg leading-tight truncate font-sans flex-1">
-            {displayTitle}
-          </h3>
-          <ModeBadge mode={note.mode || "normal"} compact />
-        </div>
+      <div className="flex items-center justify-between gap-2 min-h-11">
+        <ModeBadge mode={note.mode || "normal"} compact />
         {/* Always visible on mobile, hover-reveal on desktop */}
-        <div className="relative z-20 flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
+        <div className="relative z-20 ml-auto flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
           {onTogglePin && <button type="button" onClick={() => onTogglePin(note.id)} aria-label={pinned ? `Unpin ${displayTitle}` : `Pin ${displayTitle}`} aria-pressed={pinned}
             className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600 ${pinned ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"}`}><Pin size={16} fill={pinned ? "currentColor" : "none"} /></button>}
           {onView && !isCollabNote(note) && (
@@ -112,6 +121,10 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
           </button>}
         </div>
       </div>
+
+      <h3 className="font-bold text-lg leading-snug font-sans break-words line-clamp-2" title={displayTitle}>
+        {displayTitle}
+      </h3>
 
       {confirmDelete && (
         <div className="text-xs text-red-500 font-medium animate-pulse">
