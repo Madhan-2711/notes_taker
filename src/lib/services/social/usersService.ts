@@ -18,7 +18,25 @@ import type { User as FirebaseUser } from "firebase/auth";
  * Get or create a user profile document.
  * Called on sign-in to ensure the user has a Firestore profile.
  */
-export async function getOrCreateUserProfile(
+const profileRequests = new Map<string, Promise<UserProfile>>();
+
+// Sign-in and key setup both request the profile at once; concurrent creates
+// would stamp different createdAt values and the rules reject the second write.
+export function getOrCreateUserProfile(
+  user: FirebaseUser,
+  publicKeyJwk?: string
+): Promise<UserProfile> {
+  let request = profileRequests.get(user.uid);
+  if (!request) {
+    request = createOrLoadUserProfile(user, publicKeyJwk).finally(() => {
+      profileRequests.delete(user.uid);
+    });
+    profileRequests.set(user.uid, request);
+  }
+  return request;
+}
+
+async function createOrLoadUserProfile(
   user: FirebaseUser,
   publicKeyJwk?: string
 ): Promise<UserProfile> {
