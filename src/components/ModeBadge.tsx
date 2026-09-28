@@ -19,9 +19,9 @@ const BADGE_CONFIG: Record<NoteMode, {
   normal: {
     label: "Normal",
     icon: Unlock,
-    bgColor: "transparent",
+    bgColor: "#64748b10",
     textColor: "#64748b",
-    borderColor: "#cbd5e1",
+    borderColor: "#64748b40",
   },
   secure: {
     label: "Encrypted",
@@ -40,9 +40,8 @@ const BADGE_CONFIG: Record<NoteMode, {
 };
 
 export function ModeBadge({ mode, compact = false }: ModeBadgeProps) {
-  // Don't render a badge for normal notes to keep existing UI clean
   const effectiveMode = mode || "normal";
-  if (effectiveMode === "normal") return null;
+  if (effectiveMode === "normal" && !compact) return null;
 
   const config = BADGE_CONFIG[effectiveMode];
   const Icon = config.icon;
