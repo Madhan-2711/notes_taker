@@ -27,6 +27,8 @@ import { arrayBufferToBase64, base64ToArrayBuffer } from "../crypto/serializatio
 import * as Y from "yjs";
 import type { CollabRole } from "../../validations";
 import { deleteAllAttachments } from "../attachments";
+import { addRevisionToBatch, deleteAllRevisions } from "../noteRevisions";
+import { deleteAllComments } from "../noteComments";
 
 /**
  * Creates a collaborative note.
@@ -154,11 +156,35 @@ export async function loadCollabNote(
   };
 }
 
+/** Place images uploaded during creation into the encrypted shared document. */
+export async function appendImagesToCollabNote(noteId: string, userId: string, privateKey: CryptoKey, content: string, tokens: string[]) {
+  if (!tokens.length) return;
+  const { ydoc, noteKey } = await loadCollabNote(noteId, userId, privateKey);
+  try {
+    const text = ydoc.getText("content");
+    const addition = `\n\n${tokens.join("\n\n")}`;
+    if (content.length + addition.length > 5000) throw new Error("The note is too long to place its images. Shorten the text and retry; your uploaded files are safe.");
+    text.delete(0, text.length);
+    text.insert(0, content + addition);
+    const snapshot = Y.encodeStateAsUpdate(ydoc);
+    const encrypted = await encryptData(arrayBufferToBase64(snapshot.buffer), noteKey);
+    const noteRef = doc(db, "notes", noteId);
+    const previous = await getDoc(noteRef);
+    if (!previous.exists() || previous.data().authorId !== userId) throw new Error("Only the owner can add images to this note.");
+    const batch = writeBatch(db);
+    addRevisionToBatch(batch, noteId, previous.data(), userId);
+    batch.update(noteRef, { latestSnapshot: encrypted.ciphertext, snapshotIv: encrypted.iv, updatedAt: Date.now() });
+    await batch.commit();
+  } finally { ydoc.destroy(); }
+}
+
 /** Deletes a collaborative note and all its update documents. */
 export async function deleteCollabNote(
   noteId: string
 ): Promise<void> {
   await deleteAllAttachments(noteId);
+  await deleteAllRevisions(noteId);
+  await deleteAllComments(noteId);
   // Delete all note_updates for this note
   const updatesQuery = query(
     collection(db, "note_updates"),

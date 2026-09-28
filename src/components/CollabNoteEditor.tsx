@@ -11,6 +11,11 @@ import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
+import { NoteComments } from "./NoteComments";
+import { CollabHistory } from "./CollabHistory";
+import { InlineNoteContent } from "./InlineNoteContent";
+import { imageToken } from "../lib/inlineImages";
+import type { Attachment } from "../lib/services/attachments";
 import {
   computeTextDelta,
   transformSelectionForRemoteDelta,
@@ -56,6 +61,7 @@ export function CollabNoteEditor({
   } = useCollabEditor(noteId, userId, privateKey);
 
   const [saving, setSaving] = useState(false);
+  const [checkpointError, setCheckpointError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isLocalChangeRef = useRef(false);
 
@@ -67,6 +73,7 @@ export function CollabNoteEditor({
   // The board is a fixed logical size scaled to fit the viewport, so text wraps
   // identically and ink lands in the same place for every collaborator.
   const [scale, setScale] = useState(1);
+  const [fitBoard, setFitBoard] = useState(false);
   const [editorScrollTop, setEditorScrollTop] = useState(0);
   const [drawingLimitReached, setDrawingLimitReached] = useState(false);
   const boardWrapRef = useRef<HTMLDivElement>(null);
@@ -170,17 +177,29 @@ export function CollabNoteEditor({
     }
   }, [updateCursor]);
 
+  const insertImage = useCallback((file: Attachment) => {
+    if (!text || !canEdit) return;
+    const position = textareaRef.current?.selectionStart ?? text.length;
+    const token = `\n${imageToken(file)}\n`;
+    text.insert(position, token);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(position + token.length, position + token.length);
+      updateCursor(position + token.length);
+    });
+  }, [text, canEdit, updateCursor]);
+
   // Fit the fixed-size board into the available width. Re-runs once the board
   // mounts (after loading), so the ref is attached before we measure.
   useEffect(() => {
     const el = boardWrapRef.current;
     if (!el) return;
-    const measure = () => setScale(Math.min(1, el.clientWidth / BOARD_WIDTH));
+    const measure = () => setScale(window.innerWidth < 700 && !fitBoard ? 1 : Math.min(1, el.clientWidth / BOARD_WIDTH));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [isLoading, error]);
+  }, [isLoading, error, fitBoard]);
 
   // Set up an undo manager on the drawing layer once it is available. Default
   // tracked origins mean each user only undoes their own strokes, and undo
@@ -268,7 +287,10 @@ export function CollabNoteEditor({
             <button
               onClick={async () => {
                 setSaving(true);
-                try { await saveSnapshot(); } finally { setSaving(false); }
+                setCheckpointError("");
+                try { await saveSnapshot(); }
+                catch { setCheckpointError("Could not save a checkpoint. Your recent edits will keep retrying to sync."); }
+                finally { setSaving(false); }
               }}
               disabled={saving}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-primary border-2 border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50"
@@ -290,12 +312,16 @@ export function CollabNoteEditor({
           )}
         </div>
       </motion.div>
+      {checkpointError && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{checkpointError}</p>}
 
       <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4">
         <summary className="cursor-pointer py-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-indigo-500">Files & export</summary>
         <NoteExport title={title} content={cursorContent} encrypted />
-        {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} />}
+        {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} onInsertImage={canEdit ? insertImage : undefined} />}
       </details>
+      {cursorContent.includes("(attachment:") && <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3"><summary className="min-h-11 cursor-pointer text-sm font-bold text-slate-800">Preview images in note</summary><InlineNoteContent content={cursorContent} noteId={noteId} userId={userId} privateKey={privateKey} /></details>}
+      <NoteComments noteId={noteId} userId={userId} userName={displayName} privateKey={privateKey} />
+      {canCompact && <CollabHistory noteId={noteId} userId={userId} privateKey={privateKey} />}
 
       {/* Tool switch: routes the next pointer drag to text or ink. Both layers
           stay live at all times. */}
@@ -314,6 +340,11 @@ export function CollabNoteEditor({
         </div>
       )}
 
+      <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 sm:hidden">
+        <span>{fitBoard ? "Whole page view" : "Full-size board — swipe sideways to see more"}</span>
+        <button type="button" onClick={() => setFitBoard((value) => !value)} className="min-h-11 shrink-0 rounded-lg border border-indigo-300 px-3 font-semibold text-indigo-700 focus-visible:outline-2 focus-visible:outline-indigo-600">{fitBoard ? "Full size" : "Fit page"}</button>
+      </div>
+
       {/* Fixed-size workspace: the text editor with the drawing canvas layered
           on top at the same coordinates. The whole board scales to fit. */}
       <motion.div
@@ -321,7 +352,7 @@ export function CollabNoteEditor({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="flex w-full justify-center pb-8"
+        className="flex w-full justify-start overflow-x-auto overscroll-x-contain pb-8 xl:justify-center"
       >
         <div
           style={{ width: BOARD_WIDTH * scale, height: BOARD_HEIGHT * scale }}

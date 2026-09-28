@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
+import { InlineNoteContent } from "./InlineNoteContent";
+import { NoteHistory } from "./NoteHistory";
 import {
   type Note,
   type Group,
@@ -228,9 +230,7 @@ export function ViewNoteModal({
                     </div>
                   </div>
                 ) : decryptedContent ? (
-                  <p className="text-foreground/85 leading-[1.85] whitespace-pre-wrap break-words text-lg">
-                    {decryptedContent}
-                  </p>
+                  <InlineNoteContent content={decryptedContent} noteId={note.id} userId={userId} privateKey={privateKey ?? null} />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
@@ -257,14 +257,13 @@ export function ViewNoteModal({
                   </Link>
                 </div>
               ) : (
-                <p className="text-foreground/85 leading-[1.85] whitespace-pre-wrap break-words text-lg">
-                  {getNoteContent(note)}
-                </p>
+                <InlineNoteContent content={getNoteContent(note)} noteId={note.id} userId={userId} privateKey={null} />
               )}
               {isNormalNote(note) && <NoteExport title={note.title} content={note.content} />}
               {isNormalNote(note) && userId && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={null} knownNote={note} />}
               {isSecureNote(note) && !decrypting && !decryptError && decryptedTitle !== null && decryptedContent !== null && <NoteExport title={decryptedTitle} content={decryptedContent} encrypted />}
               {isSecureNote(note) && userId && privateKey && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} knownNote={note} />}
+              {userId && note.authorId === userId && !isCollabNote(note) && <NoteHistory key={`history:${note.id}`} note={note} userId={userId} privateKey={privateKey ?? null} onRestored={onClose} />}
             </div>
           </motion.div>
         </motion.div>

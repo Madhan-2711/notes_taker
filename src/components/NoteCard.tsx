@@ -11,7 +11,7 @@ import {
   getNoteContent,
 } from "../lib/validations";
 import { ModeBadge } from "./ModeBadge";
-import { Trash2, Pencil, Eye, Users } from "lucide-react";
+import { Trash2, Pencil, Eye, Users, Pin } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface NoteCardProps {
@@ -20,9 +20,12 @@ interface NoteCardProps {
   onDelete: (id: string) => void;
   onEdit?: (note: Note) => void;
   onView?: (note: Note) => void;
+  pinned?: boolean;
+  onTogglePin?: (id: string) => void;
+  canDelete?: boolean;
 }
 
-export function NoteCard({ note, groups = [], onDelete, onEdit, onView }: NoteCardProps) {
+export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true }: NoteCardProps) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -53,21 +56,20 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView }: NoteCa
   const canEdit = !isCollabNote(note);
 
   return (
-    <motion.div
+    <motion.article
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={{ y: -5 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className="glass neubrutal rounded-[var(--radius-xl)] p-6 relative group flex flex-col gap-3 min-h-[160px] cursor-pointer"
-      onClick={() => {
-        if (isCollabNote(note)) {
-          router.push(`/collab/${note.id}`);
-        } else {
-          onView?.(note);
-        }
-      }}
+      className="glass neubrutal rounded-[var(--radius-xl)] p-6 relative group flex flex-col gap-3 min-h-[160px]"
     >
+      <button
+        type="button"
+        className="absolute inset-0 z-10 rounded-[var(--radius-xl)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
+        aria-label={`Open ${displayTitle}`}
+        onClick={() => isCollabNote(note) ? router.push(`/collab/${note.id}`) : onView?.(note)}
+      />
       <div className="flex justify-between items-start gap-4">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <h3 className="font-bold text-lg leading-tight truncate font-sans flex-1">
@@ -76,12 +78,14 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView }: NoteCa
           <ModeBadge mode={note.mode || "normal"} compact />
         </div>
         {/* Always visible on mobile, hover-reveal on desktop */}
-        <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-          {onView && (
+        <div className="relative z-20 flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
+          {onTogglePin && <button type="button" onClick={() => onTogglePin(note.id)} aria-label={pinned ? `Unpin ${displayTitle}` : `Pin ${displayTitle}`} aria-pressed={pinned}
+            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600 ${pinned ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"}`}><Pin size={16} fill={pinned ? "currentColor" : "none"} /></button>}
+          {onView && !isCollabNote(note) && (
             <button
               onClick={(e) => { e.stopPropagation(); onView(note); }}
-              className="text-foreground/50 hover:text-accent transition-colors p-2 rounded-lg hover:bg-accent/10"
-              aria-label="View note"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-indigo-600"
+              aria-label={`View ${displayTitle}`}
             >
               <Eye size={16} />
             </button>
@@ -89,29 +93,29 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView }: NoteCa
           {onEdit && canEdit && (
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(note); }}
-              className="text-foreground/50 hover:text-primary transition-colors p-2 rounded-lg hover:bg-primary/10"
-              aria-label="Edit note"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-indigo-50 hover:text-primary focus-visible:outline-2 focus-visible:outline-indigo-600"
+              aria-label={`Edit ${displayTitle}`}
             >
               <Pencil size={16} />
             </button>
           )}
-          <button
+          {canDelete && <button
             onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-            className={`transition-colors p-2 rounded-lg ${
+            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600 ${
               confirmDelete
                 ? "text-white bg-red-500 hover:bg-red-600"
                 : "text-foreground/50 hover:text-red-500 hover:bg-red-50"
             }`}
-            aria-label={confirmDelete ? "Confirm delete" : "Delete note"}
+            aria-label={confirmDelete ? `Confirm moving ${displayTitle} to trash` : `Move ${displayTitle} to trash`}
           >
             <Trash2 size={16} />
-          </button>
+          </button>}
         </div>
       </div>
 
       {confirmDelete && (
         <div className="text-xs text-red-500 font-medium animate-pulse">
-          Tap again to delete
+          Tap again to move to trash
         </div>
       )}
 
@@ -160,6 +164,6 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView }: NoteCa
           </div>
         )}
       </div>
-    </motion.div>
+    </motion.article>
   );
 }

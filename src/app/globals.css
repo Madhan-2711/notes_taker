@@ -22,6 +22,7 @@
     --accent: #10b981;
     --accent-foreground: #ffffff;
     --border: #e2e8f0;
+    --muted-foreground: #475569;
     --neubrutalism-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
     --neubrutalism-shadow-hover: 6px 6px 0px 0px rgba(0, 0, 0, 1);
   }
@@ -51,5 +52,23 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+  /* Keep quiet labels legible without changing the indigo/emerald theme. */
+  .text-foreground\/35,
+  .text-foreground\/40,
+  .text-foreground\/45,
+  .text-foreground\/50 {
+    color: var(--muted-foreground);
+  }
+  .placeholder\:text-foreground\/25::placeholder {
+    color: var(--muted-foreground);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

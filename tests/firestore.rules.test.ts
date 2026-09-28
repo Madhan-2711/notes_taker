@@ -9,6 +9,7 @@ import {
 import {
   arrayUnion,
   collection,
+  deleteField,
   deleteDoc,
   doc,
   documentId,
@@ -333,6 +334,52 @@ describe("inline attachment authorization", () => {
     const second = await assertSucceeds(getDocs(query(attachments, ...sorting, startAfter(last.data().createdAt, last.id), limit(20))));
     expect(first.size).toBe(20);
     expect(second.size).toBe(1);
+  });
+});
+
+describe("trash, history, discussion, and pins", () => {
+  test("only the owner can trash and restore a note", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    await assertSucceeds(updateDoc(doc(alice, "notes", "note-1"), { deletedAt: 100, updatedAt: 100 }));
+    await assertFails(updateDoc(doc(bob, "notes", "note-1"), { deletedAt: 101, updatedAt: 101 }));
+    await assertSucceeds(updateDoc(doc(alice, "notes", "note-1"), { deletedAt: deleteField(), updatedAt: 102 }));
+  });
+
+  test("note owners can save encrypted revisions; outsiders cannot read them", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "notes", "note-1"), { encryptedTitle: "title", titleIv: "nonce" });
+    });
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const revision = { mode: "collab", editorId: "alice", createdAt: 2, title: "Shared", encryptedTitle: "title", titleIv: "nonce", latestSnapshot: "ciphertext", snapshotIv: "iv" };
+    await assertSucceeds(setDoc(doc(alice, "notes", "note-1", "revisions", "v1"), revision));
+    await assertFails(getDoc(doc(bob, "notes", "note-1", "revisions", "v1")));
+    await assertFails(setDoc(doc(bob, "notes", "note-1", "revisions", "v2"), { ...revision, editorId: "bob" }));
+  });
+
+  test("members can comment, but only the author or owner may remove a comment", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "notes", "note-1"), {
+        collaboratorIds: ["bob"], collaboratorRoles: { bob: "viewer" }, encryptedKeys: { alice: "a", bob: "b" },
+      });
+    });
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const mallory = testEnv.authenticatedContext("mallory").firestore();
+    const payload = { authorId: "bob", authorName: "Bob", ciphertext: "encrypted", iv: "nonce", createdAt: 2 };
+    await assertSucceeds(setDoc(doc(bob, "notes", "note-1", "comments", "c1"), payload));
+    await assertFails(setDoc(doc(mallory, "notes", "note-1", "comments", "c2"), { ...payload, authorId: "mallory" }));
+    await assertFails(deleteDoc(doc(mallory, "notes", "note-1", "comments", "c1")));
+    await assertSucceeds(deleteDoc(doc(bob, "notes", "note-1", "comments", "c1")));
+  });
+
+  test("note pins are private to each account", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const preference = doc(alice, "users", "alice", "preferences", "notes");
+    await assertSucceeds(setDoc(preference, { pinnedIds: ["note-1"] }));
+    await assertFails(getDoc(doc(bob, "users", "alice", "preferences", "notes")));
+    await assertFails(setDoc(doc(bob, "users", "alice", "preferences", "notes"), { pinnedIds: ["note-1"] }));
   });
 });
 

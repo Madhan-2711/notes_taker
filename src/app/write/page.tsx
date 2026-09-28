@@ -3,13 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
+import { useNoteDraft } from "../../contexts/NoteDraftContext";
 import { db, hasValidConfig } from "../../lib/firebaseConfig";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { noteSchema, type Group, type NoteMode } from "../../lib/validations";
-import { createNormalNote } from "../../lib/services/notes/normalNotesService";
-import { createSecureNote } from "../../lib/services/notes/secureNotesService";
-import { createCollabNote } from "../../lib/services/notes/collaborativeNotesService";
+import { createNormalNote, updateNormalNote } from "../../lib/services/notes/normalNotesService";
+import { createSecureNote, updateSecureNote } from "../../lib/services/notes/secureNotesService";
+import { appendImagesToCollabNote, createCollabNote } from "../../lib/services/notes/collaborativeNotesService";
 import { attachmentAccess, uploadAttachment } from "../../lib/services/attachments";
+import { imageToken } from "../../lib/inlineImages";
 import { ATTACHMENT_ACCEPT, IMAGE_EXT, MAX_INLINE_PLAINTEXT, validateAttachment } from "../../lib/attachmentCrypto";
 import { getFriends } from "../../lib/services/social/friendsService";
 import { sendCollabInvite } from "../../lib/services/social/collaborationService";
@@ -31,9 +33,11 @@ export default function WritePage() {
     error: keyError,
   } = useUserKeys();
 
-  const [noteMode, setNoteMode] = useState<NoteMode>("normal");
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const { draft, update: updateDraft, clear: clearDraft } = useNoteDraft(user?.uid);
+  const { mode: noteMode, title, content } = draft;
+  const setNoteMode = (mode: NoteMode) => updateDraft({ mode });
+  const setTitle = (value: string) => updateDraft({ title: value });
+  const setContent = (value: string) => updateDraft({ content: value });
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +54,8 @@ export default function WritePage() {
   const createdNoteId = useRef<string | null>(null);
   const completedFiles = useRef(new Set<number>());
   const completedInvites = useRef(new Set<string>());
+  const uploadedImageTokens = useRef<string[]>([]);
+  const imageTokensApplied = useRef(false);
   const pickerRef = useRef<HTMLInputElement>(null);
 
   // Live-subscribe to user's groups for the multi-select
@@ -140,8 +146,20 @@ export default function WritePage() {
         for (const [index, file] of files.entries()) {
           if (completedFiles.current.has(index)) continue;
           setSaveStage(`Adding file ${index + 1} of ${files.length}…`);
-          await uploadAttachment(newNoteId, user.uid, key, file, () => {}, new AbortController().signal);
+          const uploaded = await uploadAttachment(newNoteId, user.uid, key, file, () => {}, new AbortController().signal);
+          if (IMAGE_EXT.test(uploaded.name)) uploadedImageTokens.current.push(imageToken(uploaded));
           completedFiles.current.add(index);
+        }
+        if (uploadedImageTokens.current.length && !imageTokensApplied.current) {
+          setSaveStage("Placing images in note…");
+          if (noteMode === "collab" && privateKey) await appendImagesToCollabNote(newNoteId, user.uid, privateKey, validData.content, uploadedImageTokens.current);
+          else {
+            const body = `${validData.content}\n\n${uploadedImageTokens.current.join("\n\n")}`;
+            if (body.length > 5000) throw new Error("The note is too long to place its images. Shorten the text and retry; your uploaded files are safe.");
+            if (noteMode === "normal") await updateNormalNote(newNoteId, validData.title, body);
+            else if (privateKey) await updateSecureNote(newNoteId, user.uid, validData.title, body, privateKey);
+          }
+          imageTokensApplied.current = true;
         }
         if (noteMode === "collab" && key) {
           for (const friendId of selectedFriends) {
@@ -155,11 +173,10 @@ export default function WritePage() {
         }
       }
 
-      if (noteMode === "collab") { router.push(`/collab/${newNoteId}`); return; }
+      if (noteMode === "collab") { clearDraft(); router.push(`/collab/${newNoteId}`); return; }
       router.push(`/notes?open=${encodeURIComponent(newNoteId)}`);
 
-      setTitle("");
-      setContent("");
+      clearDraft();
       setSelectedGroupIds([]);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);

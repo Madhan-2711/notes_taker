@@ -3,10 +3,12 @@ import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, t
 import {
   getFirestore,
   initializeFirestore,
+  memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
   type Firestore,
 } from "firebase/firestore";
+import { offlineStorageEnabled } from "./offlinePreference";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -34,9 +36,9 @@ if (hasValidConfig) {
   db =
     typeof window !== "undefined" && !appAlreadyExists
       ? initializeFirestore(app, {
-          localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager(),
-          }),
+          localCache: offlineStorageEnabled()
+            ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+            : memoryLocalCache(),
         })
       : getFirestore(app);
   googleProvider = new GoogleAuthProvider();

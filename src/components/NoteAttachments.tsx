@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import Image from "next/image";
-import { Download, Eye, Paperclip, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Download, Eye, ImagePlus, Paperclip, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { ATTACHMENT_ACCEPT } from "../lib/attachmentCrypto";
 import { attachmentAccess, downloadAttachment, listAttachments, removeAttachment, uploadAttachment, type Attachment } from "../lib/services/attachments";
 import { downloadBlob } from "../lib/noteExport";
@@ -22,8 +22,9 @@ async function withLoadingTimeout<T>(task: Promise<T>): Promise<T> {
   }
 }
 
-export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNote }: {
+export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNote, onInsertImage }: {
   noteId: string; userId: string; privateKey: CryptoKey | null; pickerRef?: RefObject<HTMLInputElement | null>; knownNote?: Note;
+  onInsertImage?: (file: Attachment) => void;
 }) {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [nextPage, setNextPage] = useState<string>();
@@ -83,8 +84,12 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
     try {
       const currentAccess = await attachmentAccess(noteId, userId, privateKey);
       if (!currentAccess.editor) throw new Error("You have read-only access.");
-      await uploadAttachment(noteId, userId, currentAccess.key, file, (value) => { if (mounted.current) setProgress(value); }, cancellation.signal);
-      if (mounted.current) { setMessage(currentAccess.key ? "File encrypted and uploaded." : "File added to normal note."); await refresh(); }
+      const uploaded = await uploadAttachment(noteId, userId, currentAccess.key, file, (value) => { if (mounted.current) setProgress(value); }, cancellation.signal);
+      if (mounted.current) {
+        if (onInsertImage && isImage(uploaded.name)) onInsertImage(uploaded);
+        setMessage(isImage(uploaded.name) && onInsertImage ? "Image uploaded and inserted in the note. Save text changes to keep its position." : currentAccess.key ? "File encrypted and uploaded." : "File added to normal note.");
+        await refresh();
+      }
     } catch (caught) {
       if (mounted.current) setError(cancellation.signal.aborted ? "Upload cancelled." : caught instanceof Error ? caught.message : "Upload failed. Please retry.");
     } finally {
@@ -155,6 +160,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
     <ul className="mt-3 space-y-2">{files.map((file) => <li key={file.path} className="rounded-xl border border-slate-100 p-3">
       <div className="flex flex-wrap items-center gap-2"><div className="min-w-0 flex-1 basis-36"><p className="break-all text-sm font-semibold">{file.name}</p><p className="text-xs text-slate-500">{(file.size / 1024).toFixed(0)} KB · {access?.key ? "encrypted" : "normal note"}</p></div>
         {isImage(file.name) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Preview ${file.name}`} onClick={() => void action(file, "preview")}><Eye size={16} /> <span className="hidden sm:inline">Preview</span></button>}
+        {isImage(file.name) && access?.editor && onInsertImage && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Insert ${file.name} into note`} onClick={() => onInsertImage(file)}><ImagePlus size={16} /> <span className="hidden sm:inline">Insert</span></button>}
         <button type="button" className={buttonStyle} disabled={busy} aria-label={`Download ${file.name}`} onClick={() => void action(file, "download")}><Download size={16} /></button>
         {access?.editor && (access.owner || file.uploader === userId) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Delete ${file.name}`} onClick={() => setConfirmDelete(file.path)}><Trash2 size={16} /></button>}
       </div>

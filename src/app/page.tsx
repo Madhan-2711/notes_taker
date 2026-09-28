@@ -17,6 +17,7 @@ import {
   LoaderCircle,
   MessageSquareMore,
   PenLine,
+  Pin,
   Plus,
   ShieldAlert,
   ShieldCheck,
@@ -25,6 +26,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useUserKeys } from "../hooks/useUserKeys";
+import { useNoteDraft } from "../contexts/NoteDraftContext";
+import { useNotePins } from "../hooks/useNotePins";
+import { OfflineStorageControl } from "../components/OfflineStorageControl";
 import { db, hasValidConfig } from "../lib/firebaseConfig";
 import {
   getNoteContent,
@@ -104,11 +108,14 @@ export default function Home() {
   } = useUserKeys();
 
   const [notes, setNotes] = useState<Note[]>([]);
+  const { pinnedIds } = useNotePins(user?.uid);
   const [groups, setGroups] = useState<Group[]>([]);
   const [invites, setInvites] = useState<CollabInvite[]>([]);
-  const [noteMode, setNoteMode] = useState<NoteMode>("normal");
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const { draft, update: updateDraft, clear: clearDraft } = useNoteDraft(user?.uid);
+  const { mode: noteMode, title, content } = draft;
+  const setNoteMode = (mode: NoteMode) => updateDraft({ mode });
+  const setTitle = (value: string) => updateDraft({ title: value });
+  const setContent = (value: string) => updateDraft({ content: value });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -161,6 +168,7 @@ export default function Home() {
         .slice(0, 4),
     [notes]
   );
+  const pinnedNotes = useMemo(() => notes.filter((note) => pinnedIds.has(note.id)).slice(0, 3), [notes, pinnedIds]);
 
   const groupCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -205,12 +213,12 @@ export default function Home() {
           [],
           publicKey
         );
+        clearDraft();
         router.push(`/collab/${noteId}`);
         return;
       }
 
-      setTitle("");
-      setContent("");
+      clearDraft();
       setSaved(true);
       window.setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -222,8 +230,11 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center" aria-label="Loading dashboard">
-        <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center" aria-label="Loading Notes Taker">
+        <h1 className="text-3xl font-bold tracking-tight">Notes Taker</h1>
+        <p className="max-w-xl text-sm leading-6 text-slate-700">Capture and organize personal notes, protect private writing with encryption, and collaborate on shared notes in real time.</p>
+        <LoaderCircle className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+        <p className="text-sm text-slate-600">Opening your workspace…</p>
       </div>
     );
   }
@@ -237,14 +248,19 @@ export default function Home() {
             <Sparkles size={25} />
           </div>
           <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-            Thoughts, <span className="text-primary italic">elevated.</span>
+            Notes Taker for <span className="text-primary italic">every idea.</span>
           </h1>
           <p className="max-w-xl text-lg leading-relaxed text-foreground/60 sm:text-xl">
-            A calm, secure workspace for personal notes and real-time collaboration.
+            Capture ideas, organize your notes, protect private writing, and work together in real time.
           </p>
           <p className="rounded-full border border-border bg-white/70 px-5 py-2.5 text-sm font-semibold shadow-sm backdrop-blur">
             Sign in to open your workspace
           </p>
+          <div className="mt-5 grid w-full gap-3 text-left sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4"><PenLine size={19} className="text-indigo-700" /><h2 className="mt-3 text-sm font-bold">Write and organize</h2><p className="mt-1 text-xs leading-5 text-slate-700">Keep your thoughts in notes and groups, with search when you need them.</p></div>
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4"><Lock size={19} className="text-indigo-700" /><h2 className="mt-3 text-sm font-bold">Private notes</h2><p className="mt-1 text-xs leading-5 text-slate-700">Choose encrypted notes for writing you want to keep private.</p></div>
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4"><Users size={19} className="text-indigo-700" /><h2 className="mt-3 text-sm font-bold">Create together</h2><p className="mt-1 text-xs leading-5 text-slate-700">Invite friends to collaborate on shared notes as you type.</p></div>
+          </div>
         </div>
       </div>
     );
@@ -427,7 +443,7 @@ export default function Home() {
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">Collaboration</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/75">Collaboration</p>
                 <h2 className="mt-1 text-xl font-bold">Your inbox</h2>
               </div>
               <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
@@ -444,13 +460,13 @@ export default function Home() {
               {latestInvite ? (
                 <div>
                   <p className="text-3xl font-bold tracking-tight">{invites.length}</p>
-                  <p className="mt-1 text-sm text-white/55">
+                  <p className="mt-1 text-sm text-white/75">
                     {invites.length === 1 ? "invitation is waiting" : "invitations are waiting"}
                   </p>
                   <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs font-semibold text-white/40">Latest invitation</p>
+                    <p className="text-xs font-semibold text-white/75">Latest invitation</p>
                     <p className="mt-1 truncate font-bold">{latestInvite.senderName || latestInvite.senderEmail}</p>
-                    <p className="mt-1 text-xs text-white/45">{formatRelativeTime(latestInvite.createdAt, currentTime)}</p>
+                    <p className="mt-1 text-xs text-white/75">{formatRelativeTime(latestInvite.createdAt, currentTime)}</p>
                   </div>
                 </div>
               ) : (
@@ -459,7 +475,7 @@ export default function Home() {
                     <Check size={22} />
                   </div>
                   <p className="font-bold">You’re all caught up</p>
-                  <p className="mt-2 text-sm leading-6 text-white/45">New collaboration invitations will appear here.</p>
+                  <p className="mt-2 text-sm leading-6 text-white/75">New collaboration invitations will appear here.</p>
                 </div>
               )}
             </div>
@@ -488,6 +504,10 @@ export default function Home() {
               </Link>
             </div>
 
+            {pinnedNotes.length > 0 && <div className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3">
+              <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-indigo-800"><Pin size={14} /> Pinned for quick access</p>
+              <div className="flex flex-wrap gap-2">{pinnedNotes.map((note) => <Link key={note.id} href={recentNoteHref(note)} className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-indigo-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:border-indigo-500 focus-visible:outline-2 focus-visible:outline-indigo-600"><span className="truncate">{getNoteTitle(note)}</span></Link>)}</div>
+            </div>}
             {recentNotes.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {recentNotes.map((note) => {
@@ -551,6 +571,7 @@ export default function Home() {
                 Manage vault backup <ArrowRight size={15} />
               </Link>
             )}
+            <OfflineStorageControl />
           </motion.aside>
 
           <motion.section

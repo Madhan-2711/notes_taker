@@ -10,9 +10,9 @@ import {
   collection,
   addDoc,
   deleteDoc,
-  updateDoc,
   getDoc,
   doc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { encryptData } from "../crypto/encrypt";
@@ -21,6 +21,7 @@ import { generateAESKey } from "../crypto/keys";
 import { encryptKeyForUser, decryptKeyFromUser } from "../crypto/sharing";
 import { addNotesToGroup } from "../../groupsService";
 import { deleteAllAttachments } from "../attachments";
+import { addRevisionToBatch, deleteAllRevisions } from "../noteRevisions";
 
 /**
  * Creates an encrypted note.
@@ -143,7 +144,9 @@ export async function updateSecureNote(
   const encryptedTitle = await encryptData(title, noteKey);
   const encryptedContent = await encryptData(content, noteKey);
 
-  await updateDoc(ref, {
+  const batch = writeBatch(db);
+  addRevisionToBatch(batch, noteId, data, userId);
+  batch.update(ref, {
     encryptedTitle: encryptedTitle.ciphertext,
     encryptedContent: encryptedContent.ciphertext,
     iv: JSON.stringify({
@@ -152,10 +155,12 @@ export async function updateSecureNote(
     }),
     updatedAt: Date.now(),
   });
+  await batch.commit();
 }
 
 /** Deletes a secure note (same as deleting any note). */
 export async function deleteSecureNote(noteId: string): Promise<void> {
   await deleteAllAttachments(noteId);
+  await deleteAllRevisions(noteId);
   await deleteDoc(doc(db, "notes", noteId));
 }

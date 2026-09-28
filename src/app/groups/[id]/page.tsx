@@ -5,9 +5,9 @@ import { useParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
 import { useUserKeys } from "../../../hooks/useUserKeys";
 import { db, hasValidConfig } from "../../../lib/firebaseConfig";
-import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { type Note, type Group } from "../../../lib/validations";
-import { subscribeToNotes, deleteNote } from "../../../lib/services/notes/normalNotesService";
+import { subscribeToNotes, moveNoteToTrash, updateNormalNote } from "../../../lib/services/notes/normalNotesService";
 import { NoteCard } from "../../../components/NoteCard";
 import { EditNoteModal } from "../../../components/EditNoteModal";
 import { ViewNoteModal } from "../../../components/ViewNoteModal";
@@ -67,13 +67,13 @@ export default function GroupDetailPage() {
 
   const handleDeleteNote = async (id: string) => {
     if (!user || !hasValidConfig) return;
-    try { await deleteNote(id); }
+    try { await moveNoteToTrash(id); }
     catch (e) { console.error("Delete failed", e); }
   };
 
   const handleUpdateNote = async (id: string, title: string, content: string) => {
     if (!user || !hasValidConfig) return;
-    await updateDoc(doc(db, "notes", id), { title, content, updatedAt: Date.now() });
+    await updateNormalNote(id, title, content);
   };
 
   if (loading) {
@@ -155,6 +155,7 @@ export default function GroupDetailPage() {
                         onDelete={handleDeleteNote}
                         onEdit={setEditingNote}
                         onView={setViewingNote}
+                        canDelete={note.authorId === user?.uid}
                       />
                     ))}
                   </AnimatePresence>

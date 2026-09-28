@@ -24,7 +24,7 @@ export default function GroupsPage() {
     if (!user || !hasValidConfig) return;
     const q = query(collection(db, "notes"), where("authorId", "==", user.uid));
     const unsub = onSnapshot(q, (snap) => {
-      setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Note[]);
+      setNotes((snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Note[]).filter((note) => !note.deletedAt));
     });
     return () => unsub();
   }, [user]);

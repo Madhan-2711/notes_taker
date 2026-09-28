@@ -14,8 +14,8 @@ import * as Y from "yjs";
 import {
   collection,
   addDoc,
-  updateDoc,
   doc,
+  getDoc,
   query,
   where,
   onSnapshot,
@@ -29,6 +29,8 @@ import { encryptData } from "../lib/services/crypto/encrypt";
 import { decryptData } from "../lib/services/crypto/decrypt";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "../lib/services/crypto/serialization";
 import type { Stroke } from "../lib/drawing";
+import { addRevisionToBatch } from "../lib/services/noteRevisions";
+import { auth } from "../lib/firebaseConfig";
 
 interface UseCollabEditorReturn {
   text: Y.Text | null;
@@ -263,9 +265,10 @@ export function useCollabEditor(
       await compactSnapshot(noteId, ydoc, noteKey, includedIds);
       includedIds.forEach((id) => processedUpdateIdsRef.current.delete(id));
       updateCountRef.current = 0;
-      setIsSynced(true);
+      setIsSynced(pendingUpdatesRef.current.length === 0);
     } catch (err) {
       console.error("Manual snapshot save failed:", err);
+      throw err;
     }
   }, [noteId, canCompact]);
 
@@ -283,12 +286,18 @@ async function compactSnapshot(
   const base64 = arrayBufferToBase64(fullState.buffer);
   const encrypted = await encryptData(base64, noteKey);
 
-    // Update the note's snapshot
-  await updateDoc(doc(db, "notes", noteId), {
+  const noteRef = doc(db, "notes", noteId);
+  const previous = await getDoc(noteRef);
+  const ownerId = auth.currentUser?.uid;
+  if (!previous.exists() || !ownerId || previous.data().authorId !== ownerId) throw new Error("Only the owner can save a checkpoint.");
+  const batch = writeBatch(db);
+  addRevisionToBatch(batch, noteId, previous.data(), ownerId);
+  batch.update(noteRef, {
     latestSnapshot: encrypted.ciphertext,
     snapshotIv: encrypted.iv,
     updatedAt: Date.now(),
   });
+  await batch.commit();
 
   // Delete only update IDs known to be represented by this exact snapshot.
   // Concurrent updates that arrive after encoding are not in this list and survive.

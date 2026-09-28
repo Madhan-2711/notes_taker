@@ -15,6 +15,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, FolderOpen, ImagePlus, Lock, Users, Loader2 } from "lucide-react";
 import { setNoteGroupIds } from "../lib/groupsService";
 import { NoteAttachments } from "./NoteAttachments";
+import { InlineNoteContent } from "./InlineNoteContent";
+import { imageToken } from "../lib/inlineImages";
+import type { Attachment } from "../lib/services/attachments";
 
 interface EditNoteModalProps {
   note: Note | null;
@@ -45,6 +48,17 @@ export function EditNoteModal({
   const [decryptedForNote, setDecryptedForNote] = useState<string | null>(null);
   const attachmentsRef = useRef<HTMLDivElement>(null);
   const attachmentPickerRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertImage = (file: Attachment) => {
+    const token = `\n${imageToken(file)}\n`;
+    const textarea = contentRef.current;
+    const position = textarea?.selectionStart ?? content.length;
+    const updated = `${content.slice(0, position)}${token}${content.slice(position)}`;
+    if (updated.length > 5000) { setError("Shorten the note before inserting another image."); return; }
+    setContent(updated);
+    requestAnimationFrame(() => { textarea?.focus(); textarea?.setSelectionRange(position + token.length, position + token.length); });
+  };
 
   useEffect(() => {
     if (!note) return;
@@ -218,11 +232,14 @@ export function EditNoteModal({
                     Content
                   </label>
                   <textarea
+                    ref={contentRef}
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
+                    maxLength={5000}
                     className="min-h-[38dvh] w-full resize-y rounded-xl border border-border/70 bg-slate-50/40 p-4 text-base leading-7 outline-none transition-colors placeholder:text-foreground/25 focus:border-primary focus:bg-white sm:min-h-[48dvh] sm:p-5"
                   />
                   <p className="mt-1 text-right text-xs text-foreground/40">{content.length.toLocaleString()} / 5,000 characters</p>
+                  {content.includes("(attachment:") && userId && <details className="mt-3 rounded-xl border border-slate-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Preview note with images</summary><InlineNoteContent content={content} noteId={note.id} userId={userId} privateKey={privateKey ?? null} /></details>}
                 </div>
 
                 {groups.length > 0 && (
@@ -260,7 +277,7 @@ export function EditNoteModal({
 
                 {userId && (isNormalNote(note) || (isSecureNote(note) && privateKey)) && (
                   <div ref={attachmentsRef} className="scroll-mt-4">
-                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey ?? null} pickerRef={attachmentPickerRef} knownNote={note} />
+                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey ?? null} pickerRef={attachmentPickerRef} knownNote={note} onInsertImage={insertImage} />
                     <p className="text-xs leading-5 text-foreground/50">Files upload immediately, even if you close this editor without saving text changes.</p>
                   </div>
                 )}

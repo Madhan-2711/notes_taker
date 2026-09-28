@@ -3,6 +3,9 @@ import {
   addDoc,
   deleteDoc,
   updateDoc,
+  deleteField,
+  getDoc,
+  writeBatch,
   doc,
   query,
   where,
@@ -13,6 +16,8 @@ import { db } from "../../firebaseConfig";
 import { type Note } from "../../validations";
 import { addNotesToGroup } from "../../groupsService";
 import { deleteAllAttachments } from "../attachments";
+import { addRevisionToBatch, deleteAllRevisions } from "../noteRevisions";
+import { auth } from "../../firebaseConfig";
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
@@ -54,11 +59,16 @@ export async function updateNormalNote(
   title: string,
   content: string
 ): Promise<void> {
-  await updateDoc(doc(db, "notes", noteId), {
-    title,
-    content,
-    updatedAt: Date.now(),
-  });
+  const ref = doc(db, "notes", noteId);
+  const current = await getDoc(ref);
+  if (!current.exists()) throw new Error("Note not found.");
+  const uid = auth.currentUser?.uid;
+  if (!uid || current.data().authorId !== uid) throw new Error("Only the owner can edit this note.");
+  if (current.data().title === title && current.data().content === content) return;
+  const batch = writeBatch(db);
+  addRevisionToBatch(batch, noteId, current.data(), uid);
+  batch.update(ref, { title, content, updatedAt: Date.now() });
+  await batch.commit();
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -66,7 +76,17 @@ export async function updateNormalNote(
 /** Deletes a note by ID (works for any mode). */
 export async function deleteNote(noteId: string): Promise<void> {
   await deleteAllAttachments(noteId);
+  await deleteAllRevisions(noteId);
   await deleteDoc(doc(db, "notes", noteId));
+}
+
+/** Move a note out of active views without deleting its attachments or history. */
+export async function moveNoteToTrash(noteId: string): Promise<void> {
+  await updateDoc(doc(db, "notes", noteId), { deletedAt: Date.now(), updatedAt: Date.now() });
+}
+
+export async function restoreNote(noteId: string): Promise<void> {
+  await updateDoc(doc(db, "notes", noteId), { deletedAt: deleteField(), updatedAt: Date.now() });
 }
 
 // ── Subscribe ─────────────────────────────────────────────────────────────────
@@ -78,7 +98,8 @@ export async function deleteNote(noteId: string): Promise<void> {
  */
 export function subscribeToNotes(
   userId: string,
-  callback: (notes: Note[]) => void
+  callback: (notes: Note[]) => void,
+  includeTrashed = false
 ): Unsubscribe {
   // Query 1: Notes authored by the user
   const authorQuery = query(
@@ -100,7 +121,7 @@ export function subscribeToNotes(
     const map = new Map<string, Note>();
     for (const n of authorNotes) map.set(n.id, n);
     for (const n of collabNotes) map.set(n.id, n);
-    const merged = Array.from(map.values());
+    const merged = Array.from(map.values()).filter((note) => includeTrashed || !note.deletedAt);
     merged.sort((a, b) => b.createdAt - a.createdAt);
     callback(merged);
   };

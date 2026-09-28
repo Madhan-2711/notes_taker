@@ -143,6 +143,7 @@ export async function uploadAttachment(
     createdAt: Date.now(),
   });
   progress(100);
+  return { path, name: displayName, size: bytes.byteLength, uploader: uid } satisfies Attachment;
 }
 
 /** Return attachment bytes as a Blob (forced download, never rendered as HTML). */

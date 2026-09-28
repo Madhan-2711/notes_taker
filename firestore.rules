@@ -106,6 +106,7 @@ service cloud.firestore {
         )
         && (!('groupIds' in data)
           || (data.groupIds is list && data.groupIds.size() <= 50))
+        && (!('deletedAt' in data) || data.deletedAt is number)
         && data.updatedAt is number;
     }
 
@@ -148,7 +149,7 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "title", "content", "encryptedTitle", "encryptedContent", "iv",
               "groupIds", "updatedAt", "collaboratorIds", "collaboratorRoles",
-              "encryptedKeys", "latestSnapshot", "snapshotIv", "titleIv"
+              "encryptedKeys", "latestSnapshot", "snapshotIv", "titleIv", "deletedAt"
             ]))
           ||
           (collaboratorCanEdit(resource)
@@ -229,6 +230,70 @@ service cloud.firestore {
         allow delete: if canEdit()
           && (isOwner(parentNote()) || resource.data.uploader == request.auth.uid);
       }
+
+      match /revisions/{revisionId} {
+        function parentNote() { return get(notePath(noteId)); }
+        function normalParent() { return !('mode' in parentNote().data) || parentNote().data.mode == "normal"; }
+        allow read, delete: if isOwner(parentNote());
+        allow create: if isOwner(parentNote())
+          && request.resource.data.editorId == request.auth.uid
+          && request.resource.data.createdAt is number
+          && request.resource.data.keys().hasOnly([
+            "mode", "editorId", "createdAt", "title", "content", "encryptedTitle",
+            "encryptedContent", "iv", "titleIv", "latestSnapshot", "snapshotIv"
+          ])
+          && (
+            (normalParent()
+              && request.resource.data.mode == "normal"
+              && request.resource.data.keys().hasAll(["title", "content"])
+              && request.resource.data.title is string
+              && request.resource.data.title.size() <= 100
+              && request.resource.data.content is string
+              && request.resource.data.content.size() <= 5000)
+            ||
+            (parentNote().data.mode == "secure"
+              && request.resource.data.mode == "secure"
+              && request.resource.data.keys().hasAll(["encryptedTitle", "encryptedContent", "iv"])
+              && request.resource.data.encryptedTitle is string
+              && request.resource.data.encryptedTitle.size() <= 20000
+              && request.resource.data.encryptedContent is string
+              && request.resource.data.encryptedContent.size() <= 500000
+              && request.resource.data.iv is string)
+            ||
+            (parentNote().data.mode == "collab"
+              && request.resource.data.mode == "collab"
+              && request.resource.data.keys().hasAll(["title", "encryptedTitle", "titleIv", "latestSnapshot", "snapshotIv"])
+              && request.resource.data.title is string
+              && request.resource.data.encryptedTitle is string
+              && request.resource.data.titleIv is string
+              && request.resource.data.latestSnapshot is string
+              && request.resource.data.latestSnapshot.size() <= 700000
+              && request.resource.data.snapshotIv is string)
+          );
+        allow update: if false;
+      }
+
+      match /comments/{commentId} {
+        function parentNote() { return get(notePath(noteId)); }
+        function member() { return isOwner(parentNote()) || isCollaborator(parentNote()); }
+        allow read: if member();
+        allow create: if member()
+          && parentNote().data.mode == "collab"
+          && !('deletedAt' in parentNote().data)
+          && request.resource.data.keys().hasOnly(["authorId", "authorName", "ciphertext", "iv", "createdAt"])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName is string
+          && request.resource.data.authorName.size() <= 100
+          && request.resource.data.ciphertext is string
+          && request.resource.data.ciphertext.size() > 0
+          && request.resource.data.ciphertext.size() <= 20000
+          && request.resource.data.iv is string
+          && request.resource.data.iv.size() <= 100
+          && request.resource.data.createdAt is number;
+        allow update: if false;
+        allow delete: if member()
+          && (isOwner(parentNote()) || resource.data.authorId == request.auth.uid);
+      }
     }
 
     match /groups/{groupId} {
@@ -259,6 +324,16 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["wrappedPrivateKey"]);
       allow delete: if signedIn() && request.auth.uid == uid;
+
+      match /preferences/{preferenceId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && preferenceId == "notes"
+          && request.resource.data.keys().hasOnly(["pinnedIds"])
+          && request.resource.data.pinnedIds is list
+          && request.resource.data.pinnedIds.size() <= 100;
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
     }
 
     // Non-sensitive identity and encryption material, fetched by exact UID.
