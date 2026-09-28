@@ -16,7 +16,7 @@ import { X, Check, FolderOpen, ImagePlus, Lock, Users, Loader2 } from "lucide-re
 import { setNoteGroupIds } from "../lib/groupsService";
 import { NoteAttachments } from "./NoteAttachments";
 import { InlineNoteContent } from "./InlineNoteContent";
-import { imageToken } from "../lib/inlineImages";
+import { applyVisibleEdit, hideImageTokens, imageToken, visibleToContentIndex } from "../lib/inlineImages";
 import type { Attachment } from "../lib/services/attachments";
 
 interface EditNoteModalProps {
@@ -50,14 +50,18 @@ export function EditNoteModal({
   const attachmentPickerRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
+  const visibleContent = hideImageTokens(content);
+
   const insertImage = (file: Attachment) => {
     const token = `\n${imageToken(file)}\n`;
     const textarea = contentRef.current;
-    const position = textarea?.selectionStart ?? content.length;
+    const visiblePosition = textarea?.selectionStart ?? visibleContent.length;
+    const position = visibleToContentIndex(content, visiblePosition);
     const updated = `${content.slice(0, position)}${token}${content.slice(position)}`;
     if (updated.length > 5000) { setError("Shorten the note before inserting another image."); return; }
     setContent(updated);
-    requestAnimationFrame(() => { textarea?.focus(); textarea?.setSelectionRange(position + token.length, position + token.length); });
+    const caret = visiblePosition + 3;
+    requestAnimationFrame(() => { textarea?.focus(); textarea?.setSelectionRange(caret, caret); });
   };
 
   useEffect(() => {
@@ -233,9 +237,9 @@ export function EditNoteModal({
                   </label>
                   <textarea
                     ref={contentRef}
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    maxLength={5000}
+                    value={visibleContent}
+                    onChange={(e) => setContent(applyVisibleEdit(content, visibleContent, e.target.value))}
+                    maxLength={5000 - (content.length - visibleContent.length)}
                     className="min-h-[38dvh] w-full resize-y rounded-xl border border-border/70 bg-slate-50/40 p-4 text-base leading-7 outline-none transition-colors placeholder:text-foreground/25 focus:border-primary focus:bg-white sm:min-h-[48dvh] sm:p-5"
                   />
                   <p className="mt-1 text-right text-xs text-foreground/40">{content.length.toLocaleString()} / 5,000 characters</p>
