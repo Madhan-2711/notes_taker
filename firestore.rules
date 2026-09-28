@@ -179,34 +179,50 @@ service cloud.firestore {
         allow delete: if signedIn() && request.auth.uid == uid;
       }
 
-      // Encrypted attachments stored inline (no Firebase Storage). Each doc holds
-      // base64 ciphertext plus an encrypted filename, both AES-GCM encrypted with
-      // the note's key and bound to this doc path via the AAD.
+      // Inline attachments: normal notes store base64 file bytes, while secure
+      // and collaborative notes store AES-GCM ciphertext and encrypted names.
       match /attachments/{attachmentId} {
         function parentNote() { return get(notePath(noteId)); }
         function member() { let n = parentNote(); return isOwner(n) || isCollaborator(n); }
         function canEdit() { let n = parentNote(); return isOwner(n) || collaboratorCanEdit(n); }
+        function normalParent() {
+          let n = parentNote();
+          return !('mode' in n.data) || n.data.mode == "normal";
+        }
 
         allow read: if member();
 
         allow create: if canEdit()
-          && request.resource.data.keys().hasOnly([
-            "ciphertext", "iv", "name", "nameIv", "uploader", "size", "createdAt"
-          ])
           && request.resource.data.uploader == request.auth.uid
-          && request.resource.data.ciphertext is string
-          && request.resource.data.ciphertext.size() > 0
-          && request.resource.data.ciphertext.size() <= 1000000
-          && request.resource.data.iv is string
-          && request.resource.data.iv.size() <= 32
-          && request.resource.data.name is string
-          && request.resource.data.name.size() <= 4096
-          && request.resource.data.nameIv is string
-          && request.resource.data.nameIv.size() <= 32
           && request.resource.data.size is int
           && request.resource.data.size > 0
           && request.resource.data.size <= 10485760
-          && request.resource.data.createdAt is number;
+          && request.resource.data.createdAt is number
+          && (
+            (normalParent()
+              && request.resource.data.keys().hasAll(["encrypted", "data", "name"])
+              && request.resource.data.keys().hasOnly(["encrypted", "data", "name", "uploader", "size", "createdAt"])
+              && request.resource.data.encrypted == false
+              && request.resource.data.data is string
+              && request.resource.data.data.size() > 0
+              && request.resource.data.data.size() <= 900000
+              && request.resource.data.name is string
+              && request.resource.data.name.size() > 0
+              && request.resource.data.name.size() <= 255)
+            ||
+            (!normalParent()
+              && request.resource.data.keys().hasAll(["ciphertext", "iv", "name", "nameIv"])
+              && request.resource.data.keys().hasOnly(["ciphertext", "iv", "name", "nameIv", "uploader", "size", "createdAt"])
+              && request.resource.data.ciphertext is string
+              && request.resource.data.ciphertext.size() > 0
+              && request.resource.data.ciphertext.size() <= 1000000
+              && request.resource.data.iv is string
+              && request.resource.data.iv.size() <= 32
+              && request.resource.data.name is string
+              && request.resource.data.name.size() <= 4096
+              && request.resource.data.nameIv is string
+              && request.resource.data.nameIv.size() <= 32)
+          );
 
         allow update: if false;
 

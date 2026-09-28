@@ -265,6 +265,23 @@ describe("inline attachment authorization", () => {
     createdAt: 1,
   };
 
+  test("normal-note owners can add files, but encrypted and normal formats cannot cross modes", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "notes", "normal-1"), {
+        mode: "normal", title: "Plain", content: "Text", authorId: "alice",
+        groupIds: [], createdAt: 1, updatedAt: 1,
+      });
+    });
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const plain = { encrypted: false, data: "YWJj", name: "photo.webp", uploader: "alice", size: 3, createdAt: 1 };
+    await assertSucceeds(setDoc(doc(alice, "notes", "normal-1", "attachments", "photo"), plain));
+    await assertSucceeds(getDoc(doc(alice, "notes", "normal-1", "attachments", "photo")));
+    await assertFails(getDoc(doc(bob, "notes", "normal-1", "attachments", "photo")));
+    await assertFails(setDoc(doc(alice, "notes", "normal-1", "attachments", "encrypted"), attachment));
+    await assertFails(setDoc(doc(alice, "notes", "note-1", "attachments", "plain"), plain));
+  });
+
   test("owners can save; viewers can read but not upload; outsiders cannot read", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "notes", "note-1"), {
@@ -276,13 +293,11 @@ describe("inline attachment authorization", () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
     const bob = testEnv.authenticatedContext("bob").firestore();
     const mallory = testEnv.authenticatedContext("mallory").firestore();
-    const path = ["notes", "note-1", "attachments", "file-1"];
-
-    await assertSucceeds(setDoc(doc(alice, ...path), attachment));
-    await assertSucceeds(getDoc(doc(bob, ...path)));
+    await assertSucceeds(setDoc(doc(alice, "notes", "note-1", "attachments", "file-1"), attachment));
+    await assertSucceeds(getDoc(doc(bob, "notes", "note-1", "attachments", "file-1")));
     await assertFails(setDoc(doc(bob, "notes", "note-1", "attachments", "file-2"), { ...attachment, uploader: "bob" }));
-    await assertFails(getDoc(doc(mallory, ...path)));
-    await assertFails(updateDoc(doc(alice, ...path), { ciphertext: "replacement" }));
+    await assertFails(getDoc(doc(mallory, "notes", "note-1", "attachments", "file-1")));
+    await assertFails(updateDoc(doc(alice, "notes", "note-1", "attachments", "file-1"), { ciphertext: "replacement" }));
   });
 
   test("editors can remove their own files but not the owner's", async () => {

@@ -23,15 +23,20 @@ import {
   sealAttachment,
   openAttachment,
 } from "../attachmentCrypto";
-import { isCollabNote, isSecureNote, type Note } from "../validations";
+import { isCollabNote, isNormalNote, isSecureNote, type Note } from "../validations";
 
 const PAGE_SIZE = 20;
 
 export interface Attachment { path: string; name: string; size: number; uploader: string }
 
-export async function attachmentAccess(noteId: string, uid: string, privateKey: CryptoKey, knownNote?: Note) {
+export async function attachmentAccess(noteId: string, uid: string, privateKey: CryptoKey | null, knownNote?: Note) {
   const note = knownNote?.id === noteId ? knownNote : (await getDoc(doc(db, "notes", noteId))).data() as Note | undefined;
-  if (!note || (!isSecureNote(note) && !isCollabNote(note)) || !note.encryptedKeys?.[uid]) throw new Error("You no longer have access to this note.");
+  if (!note) throw new Error("You no longer have access to this note.");
+  if (isNormalNote(note)) {
+    if (note.authorId !== uid) throw new Error("You no longer have access to this note.");
+    return { key: null, owner: true, editor: true };
+  }
+  if ((!isSecureNote(note) && !isCollabNote(note)) || !note.encryptedKeys?.[uid] || !privateKey) throw new Error("Unlock your vault to access this note's files.");
   const owner = note.authorId === uid;
   const editor = owner || (isCollabNote(note) && note.collaboratorIds?.includes(uid) && (note.collaboratorRoles?.[uid] ?? "editor") === "editor");
   return { key: await decryptKeyFromUser(note.encryptedKeys[uid], privateKey), owner, editor: Boolean(editor) };
@@ -39,11 +44,12 @@ export async function attachmentAccess(noteId: string, uid: string, privateKey: 
 
 /**
  * List a page of attachments for a note. Each attachment is one Firestore
- * document under notes/{noteId}/attachments, holding the base64 ciphertext and
- * an encrypted filename. One malformed document is skipped rather than hiding
+ * document under notes/{noteId}/attachments, holding either plaintext-compatible
+ * base64 bytes for normal notes or encrypted bytes and names for private/shared
+ * notes. One malformed document is skipped rather than hiding
  * the whole list.
  */
-export async function listAttachments(noteId: string, key: CryptoKey, pageToken?: string) {
+export async function listAttachments(noteId: string, key: CryptoKey | null, pageToken?: string) {
   const col = collection(db, "notes", noteId, "attachments");
   let cursor: { createdAt: number; id: string } | undefined;
   if (pageToken) {
@@ -64,6 +70,11 @@ export async function listAttachments(noteId: string, key: CryptoKey, pageToken?
 
   const results = await Promise.allSettled(snap.docs.map(async (item): Promise<Attachment> => {
     const data = item.data();
+    if (data.encrypted === false) {
+      if (key || typeof data.name !== "string" || data.name.length > 255 || typeof data.data !== "string") throw new Error("Invalid attachment metadata.");
+      return { path: item.ref.path, name: data.name, size: Number(data.size) || 0, uploader: String(data.uploader ?? "") };
+    }
+    if (!key) throw new Error("This file needs a vault key.");
     if (typeof data.name !== "string" || typeof data.nameIv !== "string") throw new Error("Invalid attachment metadata.");
     const decoded = await openAttachment(base64ToArrayBuffer(data.name), data.nameIv, key, `${item.ref.path}:label`);
     const label = JSON.parse(new TextDecoder().decode(decoded));
@@ -80,13 +91,13 @@ export async function listAttachments(noteId: string, key: CryptoKey, pageToken?
 }
 
 /**
- * Encrypt a file and store it inline in Firestore. Images are downscaled to
- * WebP so they fit a single document; other files must be small enough to fit.
+ * Store a file inline in Firestore. Secure/shared notes encrypt before writing;
+ * normal notes match their unencrypted text model. Images are downscaled to WebP.
  */
 export async function uploadAttachment(
   noteId: string,
   uid: string,
-  key: CryptoKey,
+  key: CryptoKey | null,
   file: File,
   progress: (value: number) => void,
   signal: AbortSignal
@@ -113,23 +124,20 @@ export async function uploadAttachment(
   const ref = doc(collection(db, "notes", noteId, "attachments"));
   const path = ref.path;
 
-  const sealed = await sealAttachment(bytes, key, path);
-  const ciphertext = arrayBufferToBase64(sealed.ciphertext);
-  if (ciphertext.length > MAX_INLINE_B64) throw new Error("This file is too large to store inline. Try a smaller image or file.");
-
-  const label = await sealAttachment(
+  const payload = key ? await sealAttachment(bytes, key, path) : null;
+  const encoded = arrayBufferToBase64(payload?.ciphertext ?? bytes);
+  if (encoded.length > MAX_INLINE_B64) throw new Error("This file is too large to store inline. Try a smaller image or file.");
+  const label = key ? await sealAttachment(
     new TextEncoder().encode(JSON.stringify({ name: displayName })).buffer,
     key,
     `${path}:label`
-  );
+  ) : null;
   if (signal.aborted) throw new Error("Upload cancelled.");
   progress(75);
 
   await setDoc(ref, {
-    ciphertext,
-    iv: sealed.iv,
-    name: arrayBufferToBase64(label.ciphertext),
-    nameIv: label.iv,
+    ...(key ? { ciphertext: encoded, iv: payload!.iv, name: arrayBufferToBase64(label!.ciphertext), nameIv: label!.iv }
+      : { encrypted: false, data: encoded, name: displayName }),
     uploader: uid,
     size: bytes.byteLength,
     createdAt: Date.now(),
@@ -137,11 +145,16 @@ export async function uploadAttachment(
   progress(100);
 }
 
-/** Decrypt an attachment and return it as a Blob (forced download, never rendered as HTML). */
-export async function downloadAttachment(file: Attachment, key: CryptoKey) {
+/** Return attachment bytes as a Blob (forced download, never rendered as HTML). */
+export async function downloadAttachment(file: Attachment, key: CryptoKey | null) {
   const snap = await getDoc(doc(db, file.path));
   if (!snap.exists()) throw new Error("Attachment not found.");
   const data = snap.data();
+  if (data.encrypted === false) {
+    if (key || typeof data.data !== "string") throw new Error("Invalid attachment.");
+    return new Blob([base64ToArrayBuffer(data.data)], { type: "application/octet-stream" });
+  }
+  if (!key) throw new Error("This file needs a vault key.");
   if (typeof data.ciphertext !== "string" || typeof data.iv !== "string") throw new Error("Invalid attachment.");
   const decrypted = await openAttachment(base64ToArrayBuffer(data.ciphertext), data.iv, key, file.path);
   return new Blob([decrypted], { type: "application/octet-stream" });

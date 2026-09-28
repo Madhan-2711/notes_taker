@@ -153,7 +153,7 @@ export function EditNoteModal({
                 <ModeBadge mode={note.mode || "normal"} />
               </div>
               <div className="flex items-center gap-2">
-                {isSecureNote(note) && isEditable && (
+                {isEditable && userId && (isNormalNote(note) || Boolean(privateKey)) && (
                   <button type="button" onClick={() => {
                     if (attachmentPickerRef.current && !attachmentPickerRef.current.disabled) attachmentPickerRef.current.click();
                     else attachmentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -258,10 +258,10 @@ export function EditNoteModal({
                   </div>
                 )}
 
-                {isSecureNote(note) && userId && privateKey && (
+                {userId && (isNormalNote(note) || (isSecureNote(note) && privateKey)) && (
                   <div ref={attachmentsRef} className="scroll-mt-4">
-                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} pickerRef={attachmentPickerRef} knownNote={note} />
-                    <p className="text-xs leading-5 text-foreground/50">Images appear with this note as encrypted attachments. They upload immediately, even if you close this editor without saving text changes.</p>
+                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey ?? null} pickerRef={attachmentPickerRef} knownNote={note} />
+                    <p className="text-xs leading-5 text-foreground/50">Files upload immediately, even if you close this editor without saving text changes.</p>
                   </div>
                 )}
 

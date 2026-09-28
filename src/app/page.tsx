@@ -404,8 +404,8 @@ export default function Home() {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <Link href="/write" className="text-xs font-semibold text-foreground/45 hover:text-primary">
-                  More options
+                <Link href="/write" className="inline-flex min-h-11 items-center text-xs font-semibold text-primary hover:underline">
+                  Add images or collaborators
                 </Link>
                 <button
                   type="submit"

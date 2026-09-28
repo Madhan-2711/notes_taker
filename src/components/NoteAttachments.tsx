@@ -23,7 +23,7 @@ async function withLoadingTimeout<T>(task: Promise<T>): Promise<T> {
 }
 
 export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNote }: {
-  noteId: string; userId: string; privateKey: CryptoKey; pickerRef?: RefObject<HTMLInputElement | null>; knownNote?: Note;
+  noteId: string; userId: string; privateKey: CryptoKey | null; pickerRef?: RefObject<HTMLInputElement | null>; knownNote?: Note;
 }) {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [nextPage, setNextPage] = useState<string>();
@@ -32,7 +32,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [access, setAccess] = useState<{ key: CryptoKey; owner: boolean; editor: boolean }>();
+  const [access, setAccess] = useState<{ key: CryptoKey | null; owner: boolean; editor: boolean }>();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ path: string; url: string; name: string } | null>(null);
   const previewUrl = useRef<string | null>(null);
@@ -84,7 +84,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
       const currentAccess = await attachmentAccess(noteId, userId, privateKey);
       if (!currentAccess.editor) throw new Error("You have read-only access.");
       await uploadAttachment(noteId, userId, currentAccess.key, file, (value) => { if (mounted.current) setProgress(value); }, cancellation.signal);
-      if (mounted.current) { setMessage("File encrypted and uploaded."); await refresh(); }
+      if (mounted.current) { setMessage(currentAccess.key ? "File encrypted and uploaded." : "File added to normal note."); await refresh(); }
     } catch (caught) {
       if (mounted.current) setError(cancellation.signal.aborted ? "Upload cancelled." : caught instanceof Error ? caught.message : "Upload failed. Please retry.");
     } finally {
@@ -120,7 +120,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
           setPreview({ path: file.path, url, name: file.name });
         } else if (mounted.current) {
           downloadBlob(blob, file.name);
-          setMessage("Decrypted file ready to download.");
+          setMessage(currentAccess.key ? "Decrypted file ready to download." : "File ready to download.");
         }
       }
     } catch { if (mounted.current) setError("Could not complete this action. Check your connection and access, then retry."); }
@@ -136,10 +136,10 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
   const isImage = (name: string) => /\.(png|jpe?g|webp|gif)$/i.test(name);
 
   const buttonStyle = "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border bg-white px-3 text-sm font-semibold hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50";
-  return <section className="my-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" aria-label="Encrypted attachments" aria-busy={busy || loading}>
+  return <section className="my-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" aria-label="Note attachments" aria-busy={busy || loading}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="flex items-center gap-2 font-bold"><Paperclip size={18} /> Files & images</h3>
-        <p className="mt-1 text-xs leading-5 text-slate-600">Encrypted before saving. Images are optimized to fit; other files up to ~650 KB.</p></div>
+        <p className="mt-1 text-xs leading-5 text-slate-600">{access && !access.key ? "Normal-note files are not encrypted. " : "Encrypted before saving. "}Images are optimized to fit; other files up to ~650 KB.</p></div>
       <button type="button" className={buttonStyle} disabled={loading || busy} onClick={() => void refresh()} aria-label="Refresh attachments"><RefreshCw size={16} /></button>
     </div>
     {(access?.editor || !access) && <div className="mt-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 text-center"
@@ -149,11 +149,11 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
       <button type="button" className={buttonStyle} disabled={busy || !access?.editor} onClick={() => input.current?.click()}><Upload size={16} /> Add image or file</button>
       <p className="mt-2 text-xs text-slate-600">{access?.editor ? "Or drop an image, PDF, text or Office document here" : error ? "Upload access could not be checked. Use refresh to retry." : "Checking upload access…"}</p>
     </div>}
-    {progress !== null && <div className="mt-4 flex items-center gap-3"><progress className="h-2 min-w-0 flex-1 accent-indigo-500" value={progress} max={100} aria-label="Upload progress" /><span className="text-xs">{progress}%</span>{progress < 75 ? <button type="button" className={buttonStyle} onClick={() => controller.current?.abort()} aria-label="Cancel upload"><X size={16} /></button> : <span className="text-xs text-slate-600">Saving securely…</span>}</div>}
+    {progress !== null && <div className="mt-4 flex items-center gap-3"><progress className="h-2 min-w-0 flex-1 accent-indigo-500" value={progress} max={100} aria-label="Upload progress" /><span className="text-xs">{progress}%</span>{progress < 75 ? <button type="button" className={buttonStyle} onClick={() => controller.current?.abort()} aria-label="Cancel upload"><X size={16} /></button> : <span className="text-xs text-slate-600">Saving…</span>}</div>}
     <div role="status" className="mt-3 text-sm text-slate-600">{loading ? "Loading attachments…" : message || (!files.length && !error ? "No attachments yet." : "")}</div>
     {error && <p role="alert" className="mt-3 break-words rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     <ul className="mt-3 space-y-2">{files.map((file) => <li key={file.path} className="rounded-xl border border-slate-100 p-3">
-      <div className="flex flex-wrap items-center gap-2"><div className="min-w-0 flex-1 basis-36"><p className="break-all text-sm font-semibold">{file.name}</p><p className="text-xs text-slate-500">{(file.size / 1024).toFixed(0)} KB · encrypted</p></div>
+      <div className="flex flex-wrap items-center gap-2"><div className="min-w-0 flex-1 basis-36"><p className="break-all text-sm font-semibold">{file.name}</p><p className="text-xs text-slate-500">{(file.size / 1024).toFixed(0)} KB · {access?.key ? "encrypted" : "normal note"}</p></div>
         {isImage(file.name) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Preview ${file.name}`} onClick={() => void action(file, "preview")}><Eye size={16} /> <span className="hidden sm:inline">Preview</span></button>}
         <button type="button" className={buttonStyle} disabled={busy} aria-label={`Download ${file.name}`} onClick={() => void action(file, "download")}><Download size={16} /></button>
         {access?.editor && (access.owner || file.uploader === userId) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Delete ${file.name}`} onClick={() => setConfirmDelete(file.path)}><Trash2 size={16} /></button>}
@@ -165,6 +165,6 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
       {confirmDelete === file.path && <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><p>Delete this file for everyone?</p><button type="button" className={buttonStyle} disabled={busy} onClick={() => void action(file, "delete")}>Delete permanently</button><button type="button" className={buttonStyle} onClick={() => setConfirmDelete(null)}>Keep file</button></div>}
     </li>)}</ul>
     {nextPage && <button type="button" className={`${buttonStyle} mt-3`} disabled={loading || busy} onClick={() => void refresh(nextPage)}>Load more</button>}
-    <p className="mt-3 text-xs leading-5 text-slate-500">Downloaded copies are decrypted. Only open documents from people you trust.</p>
+    <p className="mt-3 text-xs leading-5 text-slate-500">{access?.key ? "Downloaded copies are decrypted. " : ""}Only open documents from people you trust.</p>
   </section>;
 }
