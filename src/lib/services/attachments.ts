@@ -1,15 +1,33 @@
-import { doc, getDoc } from "firebase/firestore";
-import { getStorage, ref, list, getMetadata, getBytes, deleteObject, uploadBytesResumable } from "firebase/storage";
-import { app, db } from "../firebaseConfig";
+import {
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  collection,
+  query,
+  orderBy,
+  documentId,
+  limit as fbLimit,
+  startAfter,
+} from "firebase/firestore";
+import { auth, db } from "../firebaseConfig";
 import { decryptKeyFromUser } from "./crypto/sharing";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./crypto/serialization";
-import { MAX_ATTACHMENT_BYTES, validateAttachment, sealAttachment, openAttachment } from "../attachmentCrypto";
+import {
+  MAX_INLINE_B64,
+  MAX_INLINE_PLAINTEXT,
+  IMAGE_EXT,
+  validateAttachment,
+  normalizeImage,
+  sealAttachment,
+  openAttachment,
+} from "../attachmentCrypto";
 import { isCollabNote, isSecureNote, type Note } from "../validations";
 
-function storage() {
-  if (!app?.options.storageBucket) throw new Error("File storage is not configured yet. Contact the workspace owner.");
-  return getStorage(app);
-}
+const PAGE_SIZE = 20;
+
+export interface Attachment { path: string; name: string; size: number; uploader: string }
 
 export async function attachmentAccess(noteId: string, uid: string, privateKey: CryptoKey, knownNote?: Note) {
   const note = knownNote?.id === noteId ? knownNote : (await getDoc(doc(db, "notes", noteId))).data() as Note | undefined;
@@ -19,49 +37,132 @@ export async function attachmentAccess(noteId: string, uid: string, privateKey: 
   return { key: await decryptKeyFromUser(note.encryptedKeys[uid], privateKey), owner, editor: Boolean(editor) };
 }
 
-export interface Attachment { path: string; name: string; size: number; uploader: string }
-
+/**
+ * List a page of attachments for a note. Each attachment is one Firestore
+ * document under notes/{noteId}/attachments, holding the base64 ciphertext and
+ * an encrypted filename. One malformed document is skipped rather than hiding
+ * the whole list.
+ */
 export async function listAttachments(noteId: string, key: CryptoKey, pageToken?: string) {
-  const page = await list(ref(storage(), `attachments/${noteId}`), { maxResults: 20, ...(pageToken ? { pageToken } : {}) });
-  const files = await Promise.all(page.items.map(async (item): Promise<Attachment> => {
-    const metadata = await getMetadata(item);
-    const custom = metadata.customMetadata;
-    if (!custom?.label || !custom.labelIv) throw new Error("An attachment has invalid metadata.");
-    const decoded = await openAttachment(base64ToArrayBuffer(custom.label), custom.labelIv, key, `${item.fullPath}:label`);
+  const col = collection(db, "notes", noteId, "attachments");
+  let cursor: { createdAt: number; id: string } | undefined;
+  if (pageToken) {
+    try {
+      cursor = JSON.parse(pageToken);
+    } catch {
+      throw new Error("Invalid attachment page. Refresh the list and try again.");
+    }
+    if (!cursor || !Number.isFinite(cursor.createdAt) || typeof cursor.id !== "string" || !cursor.id) {
+      throw new Error("Invalid attachment page. Refresh the list and try again.");
+    }
+  }
+  const sorting = [orderBy("createdAt", "desc"), orderBy(documentId(), "desc")];
+  const constraints = pageToken
+    ? [...sorting, startAfter(cursor!.createdAt, cursor!.id), fbLimit(PAGE_SIZE)]
+    : [...sorting, fbLimit(PAGE_SIZE)];
+  const snap = await getDocs(query(col, ...constraints));
+
+  const results = await Promise.allSettled(snap.docs.map(async (item): Promise<Attachment> => {
+    const data = item.data();
+    if (typeof data.name !== "string" || typeof data.nameIv !== "string") throw new Error("Invalid attachment metadata.");
+    const decoded = await openAttachment(base64ToArrayBuffer(data.name), data.nameIv, key, `${item.ref.path}:label`);
     const label = JSON.parse(new TextDecoder().decode(decoded));
     if (typeof label.name !== "string" || label.name.length > 255) throw new Error("Invalid attachment name.");
-    return { path: item.fullPath, name: label.name, size: metadata.size - 16, uploader: custom.uploader };
+    return { path: item.ref.path, name: label.name, size: Number(data.size) || 0, uploader: String(data.uploader ?? "") };
   }));
-  return { files, nextPage: page.nextPageToken };
+
+  const files = results.filter((r): r is PromiseFulfilledResult<Attachment> => r.status === "fulfilled").map((r) => r.value);
+  const last = snap.docs[snap.docs.length - 1];
+  const nextPage = snap.size === PAGE_SIZE && last
+    ? JSON.stringify({ createdAt: last.data().createdAt, id: last.id })
+    : undefined;
+  return { files, nextPage };
 }
 
-export async function uploadAttachment(noteId: string, uid: string, key: CryptoKey, file: File, progress: (value: number) => void, signal: AbortSignal) {
+/**
+ * Encrypt a file and store it inline in Firestore. Images are downscaled to
+ * WebP so they fit a single document; other files must be small enough to fit.
+ */
+export async function uploadAttachment(
+  noteId: string,
+  uid: string,
+  key: CryptoKey,
+  file: File,
+  progress: (value: number) => void,
+  signal: AbortSignal
+) {
   validateAttachment(file.name, file.size);
-  const path = `attachments/${noteId}/${crypto.randomUUID()}`;
-  const payload = await sealAttachment(await file.arrayBuffer(), key, path);
-  const label = await sealAttachment(new TextEncoder().encode(JSON.stringify({ name: file.name.slice(0, 255) })).buffer, key, `${path}:label`);
+  progress(5);
+
+  let bytes: ArrayBuffer;
+  let displayName: string;
+  if (IMAGE_EXT.test(file.name)) {
+    const optimized = await normalizeImage(file);
+    bytes = await optimized.blob.arrayBuffer();
+    displayName = optimized.name;
+  } else {
+    if (file.size > MAX_INLINE_PLAINTEXT) {
+      throw new Error("This file is too large to store without file storage. Keep non-image files under ~650 KB, or attach an image instead.");
+    }
+    bytes = await file.arrayBuffer();
+    displayName = file.name.slice(0, 255);
+  }
   if (signal.aborted) throw new Error("Upload cancelled.");
-  const task = uploadBytesResumable(ref(storage(), path), payload.ciphertext, {
-    contentType: "application/octet-stream",
-    customMetadata: { uploader: uid, iv: payload.iv, label: arrayBufferToBase64(label.ciphertext), labelIv: label.iv },
+  progress(40);
+
+  const ref = doc(collection(db, "notes", noteId, "attachments"));
+  const path = ref.path;
+
+  const sealed = await sealAttachment(bytes, key, path);
+  const ciphertext = arrayBufferToBase64(sealed.ciphertext);
+  if (ciphertext.length > MAX_INLINE_B64) throw new Error("This file is too large to store inline. Try a smaller image or file.");
+
+  const label = await sealAttachment(
+    new TextEncoder().encode(JSON.stringify({ name: displayName })).buffer,
+    key,
+    `${path}:label`
+  );
+  if (signal.aborted) throw new Error("Upload cancelled.");
+  progress(75);
+
+  await setDoc(ref, {
+    ciphertext,
+    iv: sealed.iv,
+    name: arrayBufferToBase64(label.ciphertext),
+    nameIv: label.iv,
+    uploader: uid,
+    size: bytes.byteLength,
+    createdAt: Date.now(),
   });
-  const cancel = () => task.cancel();
-  signal.addEventListener("abort", cancel, { once: true });
-  try {
-    await new Promise<void>((resolve, reject) => task.on("state_changed", (snapshot) => progress(Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100)), reject, resolve));
-  } finally { signal.removeEventListener("abort", cancel); }
+  progress(100);
 }
 
+/** Decrypt an attachment and return it as a Blob (forced download, never rendered as HTML). */
 export async function downloadAttachment(file: Attachment, key: CryptoKey) {
-  const target = ref(storage(), file.path);
-  const metadata = await getMetadata(target);
-  if (!metadata.customMetadata?.iv) throw new Error("Invalid attachment.");
-  const bytes = await getBytes(target, MAX_ATTACHMENT_BYTES + 16);
-  const decrypted = await openAttachment(bytes, metadata.customMetadata.iv, key, file.path);
-  // Force download; never execute or embed user-supplied documents as HTML.
+  const snap = await getDoc(doc(db, file.path));
+  if (!snap.exists()) throw new Error("Attachment not found.");
+  const data = snap.data();
+  if (typeof data.ciphertext !== "string" || typeof data.iv !== "string") throw new Error("Invalid attachment.");
+  const decrypted = await openAttachment(base64ToArrayBuffer(data.ciphertext), data.iv, key, file.path);
   return new Blob([decrypted], { type: "application/octet-stream" });
 }
 
 export async function removeAttachment(file: Attachment) {
-  await deleteObject(ref(storage(), file.path));
+  await deleteDoc(doc(db, file.path));
+}
+
+/** Delete every attachment under a note. Call before deleting the note itself. */
+export async function deleteAllAttachments(noteId: string) {
+  const parent = await getDoc(doc(db, "notes", noteId));
+  if (!parent.exists() || parent.data().authorId !== auth.currentUser?.uid) {
+    throw new Error("Only the note owner can delete this note and its attachments.");
+  }
+  const col = collection(db, "notes", noteId, "attachments");
+  // Page through so a note with many attachments is fully cleared.
+  for (;;) {
+    const snap = await getDocs(query(col, fbLimit(100)));
+    if (snap.empty) break;
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    if (snap.size < 100) break;
+  }
 }

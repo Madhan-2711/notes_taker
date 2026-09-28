@@ -26,6 +26,7 @@ import { addNotesToGroup } from "../../groupsService";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "../crypto/serialization";
 import * as Y from "yjs";
 import type { CollabRole } from "../../validations";
+import { deleteAllAttachments } from "../attachments";
 
 /**
  * Creates a collaborative note.
@@ -157,6 +158,7 @@ export async function loadCollabNote(
 export async function deleteCollabNote(
   noteId: string
 ): Promise<void> {
+  await deleteAllAttachments(noteId);
   // Delete all note_updates for this note
   const updatesQuery = query(
     collection(db, "note_updates"),

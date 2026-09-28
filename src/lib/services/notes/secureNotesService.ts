@@ -20,6 +20,7 @@ import { decryptData } from "../crypto/decrypt";
 import { generateAESKey } from "../crypto/keys";
 import { encryptKeyForUser, decryptKeyFromUser } from "../crypto/sharing";
 import { addNotesToGroup } from "../../groupsService";
+import { deleteAllAttachments } from "../attachments";
 
 /**
  * Creates an encrypted note.
@@ -155,5 +156,6 @@ export async function updateSecureNote(
 
 /** Deletes a secure note (same as deleting any note). */
 export async function deleteSecureNote(noteId: string): Promise<void> {
+  await deleteAllAttachments(noteId);
   await deleteDoc(doc(db, "notes", noteId));
 }

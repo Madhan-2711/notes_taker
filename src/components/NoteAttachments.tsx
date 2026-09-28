@@ -139,7 +139,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
   return <section className="my-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" aria-label="Encrypted attachments" aria-busy={busy || loading}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="flex items-center gap-2 font-bold"><Paperclip size={18} /> Files & images</h3>
-        <p className="mt-1 text-xs leading-5 text-slate-600">Encrypted before upload. Up to 10 MB per file.</p></div>
+        <p className="mt-1 text-xs leading-5 text-slate-600">Encrypted before saving. Images are optimized to fit; other files up to ~650 KB.</p></div>
       <button type="button" className={buttonStyle} disabled={loading || busy} onClick={() => void refresh()} aria-label="Refresh attachments"><RefreshCw size={16} /></button>
     </div>
     {(access?.editor || !access) && <div className="mt-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 text-center"
@@ -149,7 +149,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
       <button type="button" className={buttonStyle} disabled={busy || !access?.editor} onClick={() => input.current?.click()}><Upload size={16} /> Add image or file</button>
       <p className="mt-2 text-xs text-slate-600">{access?.editor ? "Or drop an image, PDF, text or Office document here" : error ? "Upload access could not be checked. Use refresh to retry." : "Checking upload access…"}</p>
     </div>}
-    {progress !== null && <div className="mt-4 flex items-center gap-3"><progress className="h-2 min-w-0 flex-1 accent-indigo-500" value={progress} max={100} aria-label="Upload progress" /><span className="text-xs">{progress}%</span><button type="button" className={buttonStyle} onClick={() => controller.current?.abort()} aria-label="Cancel upload"><X size={16} /></button></div>}
+    {progress !== null && <div className="mt-4 flex items-center gap-3"><progress className="h-2 min-w-0 flex-1 accent-indigo-500" value={progress} max={100} aria-label="Upload progress" /><span className="text-xs">{progress}%</span>{progress < 75 ? <button type="button" className={buttonStyle} onClick={() => controller.current?.abort()} aria-label="Cancel upload"><X size={16} /></button> : <span className="text-xs text-slate-600">Saving securely…</span>}</div>}
     <div role="status" className="mt-3 text-sm text-slate-600">{loading ? "Loading attachments…" : message || (!files.length && !error ? "No attachments yet." : "")}</div>
     {error && <p role="alert" className="mt-3 break-words rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     <ul className="mt-3 space-y-2">{files.map((file) => <li key={file.path} className="rounded-xl border border-slate-100 p-3">

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { sealAttachment, openAttachment, validateAttachment, MAX_ATTACHMENT_BYTES } from "../src/lib/attachmentCrypto";
+import { sealAttachment, openAttachment, validateAttachment, optimizedImageName, MAX_ATTACHMENT_BYTES } from "../src/lib/attachmentCrypto";
 import { exportText, safeFilename } from "../src/lib/noteExport";
 
 describe("encrypted attachments", () => {
@@ -22,6 +22,11 @@ describe("encrypted attachments", () => {
     expect(() => validateAttachment("notes.txt", 0)).toThrow();
     expect(() => validateAttachment("image.svg", 20)).toThrow();
     expect(() => validateAttachment("program.exe", 20)).toThrow();
+  });
+  test("keeps optimized image names within the attachment list limit", () => {
+    expect(optimizedImageName("photo.jpg")).toBe("photo.webp");
+    expect(optimizedImageName(`${"a".repeat(252)}.png`).length).toBeLessThanOrEqual(255);
+    expect(optimizedImageName("untitled.gif")).toBe("untitled.webp");
   });
 });
 

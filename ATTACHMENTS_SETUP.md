@@ -1,27 +1,24 @@
 # Encrypted attachments and exports
 
-Open a saved private note to attach images/documents; shared notes have an attachment panel above the editor. All members can download. Owners and editors can upload; owners can remove any attachment and editors can remove their own. Uploads are limited to 10 MB. Refresh retrieves newly uploaded files from collaborators; listings paginate at 20 files.
+Open a saved private note to attach images/documents; shared notes have an attachment panel above the editor. All members can download. Owners and editors can upload; owners can remove any attachment and editors can remove their own. Refresh retrieves newly uploaded files from collaborators; listings paginate at 20 files.
 
 To add an image to a private note: open **My Notes**, select the secure note, choose **Edit**, then **Add image or file**. On mobile the same action appears as an image icon at the top of the editor. Use **Preview** beside an image to see it inside the note. In a shared note, open the editor and expand **Files & export**. Images belong to the note as attachments; the plain text area does not embed them at the cursor position. File uploads complete independently of text edits, so closing the editor without saving text does not undo an uploaded file.
 
-File bytes and filenames are encrypted in the browser using the note's AES-GCM key with independent random IVs and authenticated object paths. Storage sees opaque object IDs, ciphertext sizes, uploader IDs and timestamps. Downloads use authenticated SDK requests, not public download URLs. Existing collaborators retain access to previously downloaded copies after removal, as with the note itself. File types are restricted for usability, but encryption means the server cannot inspect or scan their contents; documents are downloaded, never executed inline.
+## Storage model: inline in Firestore (no Firebase Storage)
+
+Attachments are stored **inline in Cloud Firestore**, not in Firebase Storage, so the feature works on the free Spark plan with no billing account. Each attachment is one document under `notes/{noteId}/attachments/{attachmentId}` holding the base64 ciphertext, its IV, an encrypted filename, the uploader UID, the plaintext byte size, and a timestamp.
+
+Because Firestore caps a document at ~1 MiB, **images are downscaled and re-encoded to WebP in the browser** (max 1600px, quality stepped down as needed) before encryption, which keeps them comfortably under the limit — so the stored name ends in `.webp`. Non-image files (PDF, text, Office documents) are stored as-is only if they are under ~650 KB; larger non-image files are rejected with a clear message, since there is no separate object store.
+
+File bytes and filenames are encrypted in the browser using the note's AES-GCM key with independent random IVs, and each ciphertext is bound to its exact Firestore document path via the GCM additional-authenticated-data, so a blob cannot be relocated to another note or id and still decrypt. The database sees only opaque ciphertext, sizes, uploader IDs and timestamps — never plaintext bytes or filenames. Downloads decrypt in the browser and are handed to the user as `application/octet-stream`, never rendered inline as HTML. Existing collaborators retain access to previously downloaded copies after removal, as with the note itself.
 
 ## Production setup
 
-1. Enable Cloud Storage for the existing Firebase project and provision a bucket. Review Firebase's current billing requirements before enabling paid services.
-2. Set `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` to that bucket's exact name, then rebuild the client.
-3. Deploy `storage.rules` with `firebase deploy --only storage --project YOUR_PROJECT_ID`. Allow the Firebase Storage rules service to read the default Firestore database when prompted. Rules check the existing note's live membership and role. No Firestore rule changes are required.
-4. Configure bucket CORS for the exact production origin (plus localhost for development if needed). Example configuration:
+1. No Cloud Storage bucket, billing upgrade, or CORS configuration is required.
+2. Deploy the Firestore rules: `firebase deploy --only firestore:rules --project YOUR_PROJECT_ID`. The new `notes/{noteId}/attachments/{attachmentId}` block reuses the note's existing membership/role checks: members read, editors create, documents are immutable, and the note owner or the uploader can delete.
+3. Test owner uploads, viewer downloads (read-only), revoked membership, and editor restrictions in a staging project before release.
 
-```json
-[{"origin":["https://YOUR_APP_DOMAIN"],"method":["GET"],"maxAgeSeconds":3600}]
-```
-
-Apply using `gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json`. Do not commit credentials. Follow https://firebase.google.com/docs/storage/web/download-files#cors_configuration.
-
-5. Test owner uploads, viewer downloads, revoked membership and editor restrictions in a staging project before release. Run `npm run test:storage` locally (requires Java 21 and the Firebase emulators).
-
-Deploying these rules does not migrate any existing Storage policy. Review other uses of the bucket before deployment; paths outside `/attachments/{noteId}/{fileId}` are denied.
+The previous Firebase Storage implementation (`storage.rules`, the storage emulator config, and the `test:storage` script) is retained in the repo for reference but is no longer used by the client.
 
 ## Export behavior
 
@@ -29,4 +26,4 @@ Markdown and text exports download directly. Print / PDF opens a Unicode-friendl
 
 ## Retention
 
-Deleting a parent note immediately makes its files inaccessible through these rules, but does not delete Storage objects. Until a server-side orphan cleanup job is configured, delete attachments before deleting their parent note to avoid retaining billed ciphertext. A cleanup job must verify the parent is absent before deleting orphaned paths. No scheduled deletion or paid infrastructure is deployed by this change.
+Firestore does **not** delete a subcollection when its parent document is deleted, so attachment documents must be removed explicitly. The note-delete services call `deleteAllAttachments(noteId)` before deleting the parent (once the note document is gone, the rules can no longer authorize reading or deleting its attachments). Concurrent uploads during deletion still need a server-side cleanup strategy if that scenario must be guaranteed.

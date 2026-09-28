@@ -12,6 +12,7 @@ import {
 import { db } from "../../firebaseConfig";
 import { type Note } from "../../validations";
 import { addNotesToGroup } from "../../groupsService";
+import { deleteAllAttachments } from "../attachments";
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ export async function updateNormalNote(
 
 /** Deletes a note by ID (works for any mode). */
 export async function deleteNote(noteId: string): Promise<void> {
+  await deleteAllAttachments(noteId);
   await deleteDoc(doc(db, "notes", noteId));
 }
 

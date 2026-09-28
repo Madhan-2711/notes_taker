@@ -178,6 +178,41 @@ service cloud.firestore {
           && request.resource.data.lastSeen is number;
         allow delete: if signedIn() && request.auth.uid == uid;
       }
+
+      // Encrypted attachments stored inline (no Firebase Storage). Each doc holds
+      // base64 ciphertext plus an encrypted filename, both AES-GCM encrypted with
+      // the note's key and bound to this doc path via the AAD.
+      match /attachments/{attachmentId} {
+        function parentNote() { return get(notePath(noteId)); }
+        function member() { let n = parentNote(); return isOwner(n) || isCollaborator(n); }
+        function canEdit() { let n = parentNote(); return isOwner(n) || collaboratorCanEdit(n); }
+
+        allow read: if member();
+
+        allow create: if canEdit()
+          && request.resource.data.keys().hasOnly([
+            "ciphertext", "iv", "name", "nameIv", "uploader", "size", "createdAt"
+          ])
+          && request.resource.data.uploader == request.auth.uid
+          && request.resource.data.ciphertext is string
+          && request.resource.data.ciphertext.size() > 0
+          && request.resource.data.ciphertext.size() <= 1000000
+          && request.resource.data.iv is string
+          && request.resource.data.iv.size() <= 32
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 4096
+          && request.resource.data.nameIv is string
+          && request.resource.data.nameIv.size() <= 32
+          && request.resource.data.size is int
+          && request.resource.data.size > 0
+          && request.resource.data.size <= 10485760
+          && request.resource.data.createdAt is number;
+
+        allow update: if false;
+
+        allow delete: if canEdit()
+          && (isOwner(parentNote()) || resource.data.uploader == request.auth.uid);
+      }
     }
 
     match /groups/{groupId} {

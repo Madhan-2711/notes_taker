@@ -9,15 +9,21 @@ import {
 import {
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
+  startAfter,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
-import { afterAll, beforeAll, beforeEach, describe, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 
 const PROJECT_ID = "notes-taker-rules-test";
 let testEnv: RulesTestEnvironment;
@@ -245,6 +251,73 @@ describe("collaboration roles and updates", () => {
         cursorPosition: 0,
       })
     );
+  });
+});
+
+describe("inline attachment authorization", () => {
+  const attachment = {
+    ciphertext: "encrypted-bytes",
+    iv: "nonce",
+    name: "encrypted-name",
+    nameIv: "name-nonce",
+    uploader: "alice",
+    size: 10,
+    createdAt: 1,
+  };
+
+  test("owners can save; viewers can read but not upload; outsiders cannot read", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "notes", "note-1"), {
+        collaboratorIds: ["bob"],
+        collaboratorRoles: { bob: "viewer" },
+        encryptedKeys: { alice: "a", bob: "b" },
+      });
+    });
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const mallory = testEnv.authenticatedContext("mallory").firestore();
+    const path = ["notes", "note-1", "attachments", "file-1"];
+
+    await assertSucceeds(setDoc(doc(alice, ...path), attachment));
+    await assertSucceeds(getDoc(doc(bob, ...path)));
+    await assertFails(setDoc(doc(bob, "notes", "note-1", "attachments", "file-2"), { ...attachment, uploader: "bob" }));
+    await assertFails(getDoc(doc(mallory, ...path)));
+    await assertFails(updateDoc(doc(alice, ...path), { ciphertext: "replacement" }));
+  });
+
+  test("editors can remove their own files but not the owner's", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "notes", "note-1"), {
+        collaboratorIds: ["bob"],
+        collaboratorRoles: { bob: "editor" },
+        encryptedKeys: { alice: "a", bob: "b" },
+      });
+    });
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    await assertSucceeds(setDoc(doc(alice, "notes", "note-1", "attachments", "owner-file"), attachment));
+    await assertSucceeds(setDoc(doc(bob, "notes", "note-1", "attachments", "editor-file"), { ...attachment, uploader: "bob" }));
+    await assertFails(deleteDoc(doc(bob, "notes", "note-1", "attachments", "owner-file")));
+    await assertSucceeds(deleteDoc(doc(bob, "notes", "note-1", "attachments", "editor-file")));
+    await assertSucceeds(deleteDoc(doc(alice, "notes", "note-1", "attachments", "owner-file")));
+  });
+
+  test("timestamp ties remain pageable with document ID as a second sort key", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const batch = writeBatch(context.firestore());
+      for (let index = 0; index < 21; index += 1) {
+        batch.set(doc(context.firestore(), "notes", "note-1", "attachments", `file-${index.toString().padStart(2, "0")}`), attachment);
+      }
+      await batch.commit();
+    });
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const attachments = collection(alice, "notes", "note-1", "attachments");
+    const sorting = [orderBy("createdAt", "desc"), orderBy(documentId(), "desc")];
+    const first = await assertSucceeds(getDocs(query(attachments, ...sorting, limit(20))));
+    const last = first.docs[first.docs.length - 1];
+    const second = await assertSucceeds(getDocs(query(attachments, ...sorting, startAfter(last.data().createdAt, last.id), limit(20))));
+    expect(first.size).toBe(20);
+    expect(second.size).toBe(1);
   });
 });
 
