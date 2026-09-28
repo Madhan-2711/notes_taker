@@ -6,7 +6,7 @@ import { useCollabEditor } from "../hooks/useCollabEditor";
 import { usePresence } from "../hooks/usePresence";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { motion } from "framer-motion";
-import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save } from "lucide-react";
+import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save, Maximize2, Minimize2 } from "lucide-react";
 import Link from "next/link";
 import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
@@ -122,17 +122,53 @@ export function CollabNoteEditor({
     setTool("move");
   }, [images, canEdit, userId, editorScrollTop]);
 
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const exitFullscreen = useCallback(() => {
+    setFullscreen(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
+
+  const enterFullscreen = useCallback(() => {
+    setFullscreen(true);
+    // Browser full screen also hides the tabs and address bar where supported;
+    // the fixed overlay alone covers browsers that refuse it.
+    void document.documentElement.requestFullscreen?.().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector(".ql-expanded")) exitFullscreen();
+    };
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, [fullscreen, exitFullscreen]);
+
   // Fit the fixed-size board into the available width. Re-runs once the board
   // mounts (after loading), so the ref is attached before we measure.
   useEffect(() => {
     const el = boardWrapRef.current;
     if (!el) return;
-    const measure = () => setScale(window.innerWidth < 700 && !fitBoard ? 1 : Math.min(1, el.clientWidth / BOARD_WIDTH));
+    const measure = () => setScale(
+      fullscreen ? Math.min(2, el.clientWidth / BOARD_WIDTH)
+        : window.innerWidth < 700 && !fitBoard ? 1 : Math.min(1, el.clientWidth / BOARD_WIDTH)
+    );
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [isLoading, error, fitBoard]);
+  }, [isLoading, error, fitBoard, fullscreen]);
 
   // Set up an undo manager on the drawing layer once it is available. Default
   // tracked origins mean each user only undoes their own strokes, and undo
@@ -233,6 +269,17 @@ export function CollabNoteEditor({
             </button>
           )}
 
+          <button
+            type="button"
+            onClick={enterFullscreen}
+            aria-label="Full screen"
+            title="Full screen"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-slate-700 border-2 border-slate-200 hover:bg-slate-50 transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600"
+          >
+            <Maximize2 size={14} />
+            <span className="hidden sm:inline">Full screen</span>
+          </button>
+
           {/* Share button */}
           {onShare && (
             <button
@@ -255,14 +302,35 @@ export function CollabNoteEditor({
       <NoteComments noteId={noteId} userId={userId} userName={displayName} privateKey={privateKey} />
       {canCompact && <CollabHistory noteId={noteId} userId={userId} privateKey={privateKey} />}
 
-      {/* Tool switch: routes the next pointer drag to text or ink. Both layers
-          stay live at all times. */}
+      <div
+        className={fullscreen ? "fixed inset-0 z-[60] overflow-y-auto px-3 py-3 sm:px-6" : ""}
+        style={fullscreen ? { background: "var(--background)" } : undefined}
+        role={fullscreen ? "dialog" : undefined}
+        aria-modal={fullscreen || undefined}
+        aria-label={fullscreen ? `${title} in full screen` : undefined}
+      >
+      {fullscreen && (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="min-w-0 truncate text-lg font-bold tracking-tight">{title}</h2>
+          <button
+            type="button"
+            onClick={exitFullscreen}
+            className="flex shrink-0 items-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-600"
+          >
+            <Minimize2 size={14} /> Exit full screen <kbd className="hidden rounded border border-slate-300 px-1.5 text-xs font-medium text-slate-500 sm:inline">Esc</kbd>
+          </button>
+        </div>
+      )}
+
+      {/* Formatting sits above later siblings so its dropdowns aren't painted under them. */}
       <div
         ref={setToolbarContainer}
-        className={`collab-toolbar glass neubrutal mb-3 rounded-2xl p-1.5 sm:p-2 ${canEdit && tool === "text" ? "" : "hidden"}`}
+        className={`collab-toolbar glass neubrutal relative z-30 mb-3 rounded-2xl p-1.5 sm:p-2 ${canEdit && tool === "text" ? "" : "hidden"}`}
       />
+      {/* Tool switch: routes the next pointer drag to text or ink. Both layers
+          stay live at all times. */}
       {canEdit && (
-        <div className="mb-4 flex justify-center">
+        <div className="relative z-20 mb-4 flex justify-center">
           <DrawingToolbar
             tool={tool}
             onToolChange={selectTool}
@@ -340,6 +408,7 @@ export function CollabNoteEditor({
           </div>
         </div>
       </motion.div>
+      </div>
 
       {!canEdit && (
         <p className="text-center text-xs font-medium text-foreground/45">
