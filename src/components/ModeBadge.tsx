@@ -1,62 +1,23 @@
 "use client";
 
-import { Lock, Unlock, Users } from "lucide-react";
 import { type NoteMode } from "../lib/validations";
+import { noteModeInfo } from "../lib/noteModes";
 
 interface ModeBadgeProps {
   mode: NoteMode;
-  /** Show only the icon without text. Default: false */
-  compact?: boolean;
+  /** Hide the plain "Note" badge, which adds nothing next to private and shared notes. Default: false */
+  hideNormal?: boolean;
 }
 
-const BADGE_CONFIG: Record<NoteMode, {
-  label: string;
-  icon: typeof Lock;
-  bgColor: string;
-  textColor: string;
-  borderColor: string;
-}> = {
-  normal: {
-    label: "Normal",
-    icon: Unlock,
-    bgColor: "#64748b10",
-    textColor: "#64748b",
-    borderColor: "#64748b40",
-  },
-  secure: {
-    label: "Encrypted",
-    icon: Lock,
-    bgColor: "#6366f110",
-    textColor: "#6366f1",
-    borderColor: "#6366f140",
-  },
-  collab: {
-    label: "Collab",
-    icon: Users,
-    bgColor: "#10b98110",
-    textColor: "#10b981",
-    borderColor: "#10b98140",
-  },
-};
-
-export function ModeBadge({ mode, compact = false }: ModeBadgeProps) {
-  const effectiveMode = mode || "normal";
-  if (effectiveMode === "normal" && !compact) return null;
-
-  const config = BADGE_CONFIG[effectiveMode];
-  const Icon = config.icon;
+export function ModeBadge({ mode, hideNormal = false }: ModeBadgeProps) {
+  const info = noteModeInfo(mode);
+  if (hideNormal && info.value === "normal") return null;
+  const Icon = info.icon;
 
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0"
-      style={{
-        backgroundColor: config.bgColor,
-        color: config.textColor,
-        borderColor: config.borderColor,
-      }}
-    >
-      <Icon size={10} />
-      {!compact && config.label}
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${info.badge}`}>
+      <Icon size={12} aria-hidden="true" />
+      {info.label}
     </span>
   );
 }

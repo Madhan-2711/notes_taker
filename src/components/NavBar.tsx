@@ -1,45 +1,189 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { signInWithPopup } from "firebase/auth";
+import { BookOpen, FolderOpen, Home, LogIn, LogOut, Plus, Settings, Users, type LucideIcon } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { PenLine, BookOpen, FolderOpen, Users } from "lucide-react";
+import { useInbox } from "../contexts/InboxContext";
+import { auth, googleProvider, hasValidConfig } from "../lib/firebaseConfig";
+import { Logo } from "./Logo";
+import { Menu } from "./ui/Menu";
 
-const NAV_LINKS = [
-  { href: "/write", label: "Write", icon: PenLine },
-  { href: "/notes", label: "My Notes", icon: BookOpen },
+interface NavLink {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const NAV_LINKS: NavLink[] = [
+  { href: "/", label: "Home", icon: Home },
+  { href: "/notes", label: "Notes", icon: BookOpen },
   { href: "/groups", label: "Groups", icon: FolderOpen },
   { href: "/friends", label: "Friends", icon: Users },
 ];
 
-export function NavBar() {
-  const { user, loading } = useAuth();
-  const pathname = usePathname();
+function isActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  // Shared notes are opened from the notes list, so keep "Notes" lit while editing one.
+  if (href === "/notes" && pathname.startsWith("/collab/")) return true;
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
-  if (loading || !user) return null;
+function Badge({ count, className = "" }: { count: number; className?: string }) {
+  if (count <= 0) return null;
+  return (
+    <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold leading-none text-white ${className}`}>
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+function AccountMenu() {
+  const { user, signOut } = useAuth();
+  if (!user) return null;
+  const name = user.displayName || user.email || "Your account";
+  const initial = name.charAt(0).toUpperCase();
 
   return (
-    <nav className="border-b border-border/50 bg-white/60 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-1 h-11 overflow-x-auto scrollbar-hide">
-          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-            const isActive = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap shrink-0 ${
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground/50 hover:text-foreground hover:bg-border/40"
-                }`}
-              >
-                <Icon size={15} />
-                {label}
+    <Menu
+      label="Account menu"
+      triggerClassName="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-slate-900 bg-indigo-50 text-sm font-bold text-indigo-800 transition-transform hover:-translate-y-0.5"
+      trigger={user.photoURL
+        ? <Image src={user.photoURL} alt="" width={44} height={44} className="h-full w-full object-cover" />
+        : <span aria-hidden="true">{initial}</span>}
+      header={<>
+        {user.displayName && <p className="truncate text-sm font-bold text-slate-900">{user.displayName}</p>}
+        {user.email && <p className="truncate text-xs text-slate-600">{user.email}</p>}
+      </>}
+      items={[
+        { label: "Settings", icon: Settings, href: "/settings" },
+        { label: "Sign out", icon: LogOut, onSelect: () => void signOut(), separated: true },
+      ]}
+    />
+  );
+}
+
+function SignInButton() {
+  const handleSignIn = async () => {
+    if (!hasValidConfig) {
+      console.warn("Firebase is not configured. Please add your credentials to .env.local");
+      return;
+    }
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Sign in failed", error);
+    }
+  };
+  return (
+    <button type="button" onClick={() => void handleSignIn()} className="btn-primary">
+      <LogIn size={16} aria-hidden="true" /> Sign in
+    </button>
+  );
+}
+
+/** Sticky top bar: logo, main navigation and account on desktop; logo and account on phones. */
+export function AppHeader() {
+  const { user, loading } = useAuth();
+  const { invites, friendRequests } = useInbox();
+  const pathname = usePathname();
+  const pending = invites.length + friendRequests.length;
+
+  return (
+    <header className="sticky top-0 z-[var(--z-header)] border-b border-slate-200 bg-white/90 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6 lg:px-8">
+        <Logo />
+        {user && (
+          <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
+            {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+              const active = isActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={`relative flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors ${
+                    active ? "bg-indigo-50 text-indigo-800" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  {label}
+                  {href === "/friends" && <Badge count={pending} />}
+                  {href === "/friends" && pending > 0 && <span className="sr-only">({pending} waiting)</span>}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+        <div className="ml-auto flex items-center gap-3">
+          {loading ? (
+            <div className="h-11 w-11 animate-pulse rounded-full bg-slate-200" aria-hidden="true" />
+          ) : user ? (
+            <>
+              <Link href="/write" className="btn-primary hidden md:inline-flex">
+                <Plus size={16} aria-hidden="true" /> New note
               </Link>
-            );
-          })}
+              <AccountMenu />
+            </>
+          ) : pathname === "/access" ? null : (
+            <SignInButton />
+          )}
         </div>
+      </div>
+    </header>
+  );
+}
+
+/** Fixed bottom navigation for phones, with "New note" in the thumb-friendly centre. */
+export function MobileTabBar() {
+  const { user, loading } = useAuth();
+  const { invites, friendRequests } = useInbox();
+  const pathname = usePathname();
+  if (loading || !user) return null;
+  const pending = invites.length + friendRequests.length;
+  const [home, notes, groups, friends] = NAV_LINKS;
+
+  const tab = ({ href, label, icon: Icon }: NavLink) => {
+    const active = isActive(pathname, href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={`relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-semibold ${
+          active ? "text-indigo-800" : "text-slate-600"
+        }`}
+      >
+        <span className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${active ? "bg-indigo-100" : ""}`}>
+          <Icon size={19} aria-hidden="true" />
+        </span>
+        {label}
+        {href === "/friends" && <Badge count={pending} className="absolute right-[calc(50%-1.4rem)] top-1" />}
+        {href === "/friends" && pending > 0 && <span className="sr-only">({pending} waiting)</span>}
+      </Link>
+    );
+  };
+
+  return (
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 bottom-0 z-[var(--z-tabbar)] border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+    >
+      <div className="mx-auto flex max-w-lg items-center gap-1 px-2 py-1">
+        {tab(home)}
+        {tab(notes)}
+        <Link
+          href="/write"
+          aria-label="New note"
+          aria-current={pathname === "/write" ? "page" : undefined}
+          className="mx-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-slate-900 bg-primary-strong text-white shadow-[3px_3px_0_0_#0f172a] active:translate-y-px"
+        >
+          <Plus size={22} aria-hidden="true" />
+        </Link>
+        {tab(groups)}
+        {tab(friends)}
       </div>
     </nav>
   );

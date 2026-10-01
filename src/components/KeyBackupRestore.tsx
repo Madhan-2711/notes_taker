@@ -156,7 +156,7 @@ export function KeyBackupRestore({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-6 sm:p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
+            className="relative bg-white neubrutal rounded-card p-6 sm:p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -279,14 +279,14 @@ export function KeyBackupRestore({
                 <div className="flex gap-3">
                   <button
                     onClick={() => setMode("menu")}
-                    className="flex-1 px-4 py-2.5 rounded-[var(--radius-xl)] border-2 border-border/50 text-sm font-bold text-foreground/60 hover:bg-border/20 transition-colors"
+                    className="flex-1 px-4 py-2.5 rounded-card border-2 border-border/50 text-sm font-bold text-foreground/60 hover:bg-border/20 transition-colors"
                   >
                     Back
                   </button>
                   <button
                     onClick={handleBackup}
                     disabled={!password || !confirmPassword || loading}
-                    className="flex-1 bg-emerald-500 text-white neubrutal px-4 py-2.5 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 hover:bg-emerald-600 transition-colors"
+                    className="flex-1 bg-emerald-500 text-white neubrutal px-4 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 hover:bg-emerald-600 transition-colors"
                   >
                     {loading ? "Backing up..." : "Backup to Cloud"}
                   </button>
@@ -333,14 +333,14 @@ export function KeyBackupRestore({
                 <div className="flex gap-3">
                   <button
                     onClick={() => setMode("menu")}
-                    className="flex-1 px-4 py-2.5 rounded-[var(--radius-xl)] border-2 border-border/50 text-sm font-bold text-foreground/60 hover:bg-border/20 transition-colors"
+                    className="flex-1 px-4 py-2.5 rounded-card border-2 border-border/50 text-sm font-bold text-foreground/60 hover:bg-border/20 transition-colors"
                   >
                     Back
                   </button>
                   <button
                     onClick={handleRestore}
                     disabled={!password || loading}
-                    className="flex-1 bg-primary text-white neubrutal px-4 py-2.5 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 hover:bg-primary/90 transition-colors"
+                    className="flex-1 bg-primary text-white neubrutal px-4 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 hover:bg-primary/90 transition-colors"
                   >
                     {loading ? "Restoring..." : "Restore from Cloud"}
                   </button>

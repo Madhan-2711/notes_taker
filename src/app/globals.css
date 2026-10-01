@@ -1,13 +1,24 @@
 @import "tailwindcss";
 
 @theme {
+  /* Registered so utilities like bg-foreground and text-primary-foreground actually generate CSS. */
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-border: #e2e8f0;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #475569;
   --color-primary: #6366f1;
+  --color-primary-strong: #4f46e5;
+  --color-primary-foreground: #ffffff;
   --color-secondary: #f8fafc;
   --color-accent: #10b981;
-  
-  --font-sans: "Inter", "Geist", "Arial", sans-serif;
 
-  --radius-xl: 24px;
+  --font-sans: var(--font-geist), "Geist", "Arial", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Radius scale: rounded-xl (12px) for controls, rounded-card (20px) for cards and panels, rounded-full for chips. */
+  --radius-card: 1.25rem;
 }
 
 @layer base {
@@ -23,8 +34,15 @@
     --accent-foreground: #ffffff;
     --border: #e2e8f0;
     --muted-foreground: #475569;
-    --neubrutalism-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
-    --neubrutalism-shadow-hover: 6px 6px 0px 0px rgba(0, 0, 0, 1);
+    --neubrutalism-shadow: 4px 4px 0px 0px #0f172a;
+    --neubrutalism-shadow-hover: 6px 6px 0px 0px #0f172a;
+    /* Shared z-index scale for the app shell and overlays. */
+    --z-header: 40;
+    --z-tabbar: 40;
+    --z-dialog: 50;
+    --z-fullscreen: 60;
+    --z-toast: 70;
+    --z-prompt: 75;
   }
 }
 
@@ -32,21 +50,68 @@
   * {
     border-color: var(--border);
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     background-color: var(--background);
     color: var(--foreground);
     @apply antialiased;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
   }
   /* Tailwind v4 resets buttons to the default arrow cursor; restore the hand so buttons look clickable. */
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
   }
+  /* One visible keyboard focus ring everywhere, unless a component draws its own. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary-strong);
+    outline-offset: 2px;
+  }
+}
+
+/* Buttons: one primary, one secondary, one quiet and one destructive style for the whole app. */
+@utility btn {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0;
+}
+@utility btn-primary {
+  @apply btn border-2 border-slate-900 bg-primary-strong font-bold text-white shadow-[3px_3px_0_0_#0f172a] hover:bg-primary hover:shadow-[4px_4px_0_0_#0f172a] disabled:hover:bg-primary-strong disabled:hover:shadow-[3px_3px_0_0_#0f172a];
+}
+@utility btn-secondary {
+  @apply btn border border-slate-300 bg-white text-slate-800 hover:border-primary hover:text-primary-strong;
+}
+@utility btn-quiet {
+  @apply btn text-slate-700 hover:bg-slate-100 hover:text-slate-900;
+}
+@utility btn-danger {
+  @apply btn border border-red-300 bg-white text-red-700 hover:border-red-500 hover:bg-red-50;
+}
+@utility icon-btn {
+  @apply inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900;
+}
+/* Surfaces: the neubrutal card is the app's signature; panels are the quiet container. */
+@utility card {
+  @apply rounded-card border-2 border-slate-900 bg-white shadow-[var(--neubrutalism-shadow)];
+}
+@utility panel {
+  @apply rounded-card border border-slate-200 bg-white;
+}
+@utility field {
+  @apply h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 transition-colors placeholder:text-slate-500 hover:border-slate-400 focus:border-primary-strong focus:outline-none focus:ring-2 focus:ring-primary/25;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-semibold text-slate-800;
+}
+@utility chip {
+  @apply inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors;
 }
 
 @layer utilities {
   .glass {
-    @apply bg-white/80 backdrop-blur-md border border-white/30 shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+    @apply bg-white/80 backdrop-blur-md border border-white/30 shadow-[0_8px_30px_rgb(15,23,42,0.05)];
   }
   .neubrutal {
     @apply border-2 border-slate-900 shadow-[var(--neubrutalism-shadow)] transition-all duration-200 hover:shadow-[var(--neubrutalism-shadow-hover)] hover:-translate-y-0.5 hover:-translate-x-0.5;
@@ -58,15 +123,30 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
-  /* Keep quiet labels legible without changing the indigo/emerald theme. */
+  /* Faded foreground text fails contrast on white; map the faint steps onto readable slate tones. */
+  .text-foreground\/20,
+  .text-foreground\/25 {
+    color: #64748b;
+  }
+  .text-foreground\/30,
   .text-foreground\/35,
   .text-foreground\/40,
   .text-foreground\/45,
   .text-foreground\/50 {
     color: var(--muted-foreground);
   }
-  .placeholder\:text-foreground\/25::placeholder {
-    color: var(--muted-foreground);
+  .placeholder\:text-foreground\/25::placeholder,
+  .placeholder\:text-foreground\/30::placeholder {
+    color: #64748b;
+  }
+  /* Space for the fixed mobile tab bar so it never covers the end of a page. */
+  .pb-tabbar {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 768px) {
+    .pb-tabbar {
+      padding-bottom: 0;
+    }
   }
 }
 

@@ -53,7 +53,7 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSubmit}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
+            className="relative bg-white neubrutal rounded-card p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
           >
             {/* Header */}
             <div className="flex items-center gap-3">
@@ -104,7 +104,7 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
             <button
               type="submit"
               disabled={!password || unlocking}
-              className="bg-primary text-primary-foreground neubrutal px-6 py-2.5 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors w-full"
+              className="bg-primary text-primary-foreground neubrutal px-6 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors w-full"
             >
               {unlocking ? "Unlocking..." : "Unlock"}
             </button>

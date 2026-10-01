@@ -98,7 +98,7 @@ export function CollaboratorManager({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-8 w-full max-w-lg flex flex-col gap-5 shadow-xl max-h-[80vh] overflow-y-auto"
+            className="relative bg-white neubrutal rounded-card p-8 w-full max-w-lg flex flex-col gap-5 shadow-xl max-h-[80vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">

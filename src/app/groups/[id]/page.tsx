@@ -128,7 +128,7 @@ export default function GroupDetailPage() {
           {currentGroup && (
             <button
               onClick={() => setManagingGroup(currentGroup)}
-              className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-primary glass neubrutal px-4 py-2 rounded-[var(--radius-xl)] transition-colors"
+              className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-primary glass neubrutal px-4 py-2 rounded-card transition-colors"
             >
               <Settings size={15} /> Manage
             </button>

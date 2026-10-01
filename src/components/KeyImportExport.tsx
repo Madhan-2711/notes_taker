@@ -241,7 +241,7 @@ export function KeyImportExport({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
+            className="relative bg-white neubrutal rounded-card p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between">

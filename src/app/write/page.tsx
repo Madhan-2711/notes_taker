@@ -251,7 +251,7 @@ export default function WritePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         onSubmit={handleCreateNote}
-        className="glass neubrutal rounded-[var(--radius-xl)] p-4 sm:p-8 flex flex-col gap-5"
+        className="glass neubrutal rounded-card p-4 sm:p-8 flex flex-col gap-5"
       >
         {/* Mode Picker */}
         <div className={saving || savedNoteId ? "pointer-events-none opacity-60" : ""}>
@@ -411,7 +411,7 @@ export default function WritePage() {
           <button
             type="submit"
             disabled={!title.trim() || !content.trim() || saving}
-            className="bg-primary text-primary-foreground neubrutal min-h-11 w-full sm:w-auto px-8 py-2.5 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+            className="bg-primary text-primary-foreground neubrutal min-h-11 w-full sm:w-auto px-8 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
           >
             {saving ? "Saving…" : savedNoteId ? "Retry remaining items" : "Post Note"}
           </button>

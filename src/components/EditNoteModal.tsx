@@ -162,13 +162,13 @@ export function EditNoteModal({
             transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSave}
-            className="relative flex h-[min(94dvh,960px)] w-full max-w-5xl flex-col overflow-hidden rounded-[var(--radius-xl)] border-2 border-slate-900 bg-white shadow-2xl"
+            className="relative flex h-[min(94dvh,960px)] w-full max-w-5xl flex-col overflow-hidden rounded-card border-2 border-slate-900 bg-white shadow-2xl"
           >
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4 py-4 sm:px-8">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-bold tracking-tight">Edit Note</h2>
-                <ModeBadge mode={note.mode || "normal"} />
+                <ModeBadge mode={note.mode || "normal"} hideNormal />
               </div>
               <div className="flex items-center gap-2">
                 {isEditable && userId && (isNormalNote(note) || Boolean(privateKey)) && (
@@ -305,7 +305,7 @@ export function EditNoteModal({
                     <button
                       type="submit"
                       disabled={!title.trim() || !content.trim() || saving}
-                      className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex items-center gap-2"
+                      className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex items-center gap-2"
                     >
                       <Check size={16} />
                       {saving ? "Saving..." : "Save Changes"}

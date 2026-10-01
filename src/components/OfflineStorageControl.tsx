@@ -63,15 +63,14 @@ export function OfflineStorageControl() {
     }
   }
 
-  return <div className="mt-5 rounded-2xl border border-slate-200 bg-white/80 p-4">
-    <h3 className="text-sm font-bold text-slate-900">Offline storage</h3>
-    <p className="mt-1 text-xs leading-5 text-slate-700">{enabled ? "This browser keeps notes on this device for offline use. Use this only on a trusted device." : "Notes are kept in memory while this tab is open. Older offline copies may still remain from previous versions."}</p>
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button type="button" disabled={busy} onClick={() => void changePreference()} className="min-h-11 rounded-xl border border-indigo-300 bg-indigo-50 px-3 text-xs font-bold text-indigo-800 hover:bg-indigo-100 focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-50">
+  return <div>
+    <p className="max-w-prose text-sm leading-6 text-slate-700">{enabled ? "This browser keeps notes on this device for offline use. Use this only on a trusted device." : "Notes are kept in memory while this tab is open. Older offline copies may still remain from previous versions."}</p>
+    <div className="mt-4 flex flex-wrap gap-2">
+      <button type="button" disabled={busy} onClick={() => void changePreference()} className="btn-secondary">
         {busy ? "Updating…" : enabled ? "Turn off offline storage" : "Enable on this trusted device"}
       </button>
-      {!enabled && <button type="button" disabled={busy} onClick={() => void clearStoredCopies()} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-50">Clear older copies</button>}
+      {!enabled && <button type="button" disabled={busy} onClick={() => void clearStoredCopies()} className="btn-quiet">Clear older copies</button>}
     </div>
-    {error && <p role="alert" className="mt-2 text-xs font-medium text-red-700">{error}</p>}
+    {error && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{error}</p>}
   </div>;
 }

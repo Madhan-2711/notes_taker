@@ -56,7 +56,7 @@ export function UsernameSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} aria-labelledby="username-signin-title" className="w-full max-w-sm rounded-[var(--radius-xl)] border-2 border-slate-900 bg-white p-6 shadow-xl">
+    <form onSubmit={submit} aria-labelledby="username-signin-title" className="w-full max-w-sm rounded-card border-2 border-slate-900 bg-white p-6 shadow-xl">
       <h1 id="username-signin-title" className="mb-5 flex items-center gap-2 text-lg font-bold"><KeyRound size={18} /> Sign in with username</h1>
       <label htmlFor="signin-username" className="mb-1 block text-sm font-semibold text-slate-700">Username</label>
       <input id="signin-username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} required autoFocus
@@ -66,7 +66,7 @@ export function UsernameSignIn({ onSignedIn }: { onSignedIn: () => void }) {
         className="h-12 w-full rounded-xl border border-slate-300 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
       <button type="submit" disabled={busy || !username.trim() || !password}
-        className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-primary px-4 text-sm font-bold text-primary-foreground neubrutal disabled:opacity-50">
+        className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-card bg-primary px-4 text-sm font-bold text-primary-foreground neubrutal disabled:opacity-50">
         {busy && <Loader2 size={16} className="animate-spin" />} Sign in
       </button>
     </form>

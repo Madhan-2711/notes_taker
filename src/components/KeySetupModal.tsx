@@ -63,7 +63,7 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSubmit}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
+            className="relative bg-white neubrutal rounded-card p-8 w-full max-w-md flex flex-col gap-5 shadow-xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -139,7 +139,7 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
               <button
                 type="submit"
                 disabled={!password || !confirm || saving}
-                className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
               >
                 {saving ? "Setting up..." : "Set Password"}
               </button>

@@ -376,7 +376,7 @@ export function CollabNoteEditor({
           className="relative"
         >
           <div
-            className="glass neubrutal absolute left-0 top-0 overflow-hidden rounded-[var(--radius-xl)]"
+            className="glass neubrutal absolute left-0 top-0 overflow-hidden rounded-card"
             style={{
               width: BOARD_WIDTH,
               height: BOARD_HEIGHT,

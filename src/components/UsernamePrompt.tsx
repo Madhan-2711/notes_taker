@@ -34,7 +34,7 @@ export function UsernamePrompt() {
   return (
     <div className="fixed inset-0 z-[75] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="username-prompt-title">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative w-full max-w-md rounded-[var(--radius-xl)] border-2 border-slate-900 bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-card border-2 border-slate-900 bg-white p-6 shadow-2xl">
         <h2 id="username-prompt-title" className="text-lg font-bold">Choose your username</h2>
         <p className="mb-5 mt-1 text-sm text-slate-600">Friends can send you requests with your username instead of your email.</p>
         <UsernameForm userId={user.uid} initial={suggestUsername(user.displayName, user.email)} submitLabel="Save" autoFocus onSaved={() => setSavedFor(user.uid)} />

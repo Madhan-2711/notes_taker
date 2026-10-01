@@ -347,7 +347,7 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.06 }}
             onSubmit={handleQuickCapture}
-            className="glass rounded-[28px] border border-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-7 lg:col-span-8"
+            className="glass rounded-card border border-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-7 lg:col-span-8"
           >
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -439,7 +439,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="rounded-[28px] border border-slate-900 bg-slate-950 p-5 text-white shadow-[5px_5px_0_0_rgba(99,102,241,0.45)] sm:p-6 lg:col-span-4"
+            className="rounded-card border border-slate-900 bg-slate-950 p-5 text-white shadow-[5px_5px_0_0_rgba(99,102,241,0.45)] sm:p-6 lg:col-span-4"
           >
             <div className="flex items-start justify-between">
               <div>
@@ -492,7 +492,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.14 }}
-            className="glass rounded-[28px] border border-white/70 p-5 sm:p-6 lg:col-span-8"
+            className="glass rounded-card border border-white/70 p-5 sm:p-6 lg:col-span-8"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
@@ -546,7 +546,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.18 }}
-            className="glass rounded-[28px] border border-white/70 p-5 sm:p-6 lg:col-span-4"
+            className="glass rounded-card border border-white/70 p-5 sm:p-6 lg:col-span-4"
           >
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-foreground/35">Security</p>
             <h2 className="mt-1 text-xl font-bold tracking-tight">Vault status</h2>
@@ -578,7 +578,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.22 }}
-            className="glass rounded-[28px] border border-white/70 p-5 sm:p-6 lg:col-span-12"
+            className="glass rounded-card border border-white/70 p-5 sm:p-6 lg:col-span-12"
           >
             <div className="mb-5 flex items-center justify-between">
               <div>

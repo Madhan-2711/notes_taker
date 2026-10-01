@@ -1,15 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-/** Registers the service worker and offers an Install button where the browser supports it. */
-export function AppInstall() {
+interface InstallState {
+  /** True when the browser offered an install prompt that has not been used yet. */
+  canInstall: boolean;
+  install: () => Promise<void>;
+}
+
+const InstallContext = createContext<InstallState>({ canInstall: false, install: async () => {} });
+
+/** Registers the service worker and keeps the browser's install prompt for the Settings page. */
+export function InstallProvider({ children }: { children: ReactNode }) {
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
 
   useEffect(() => {
@@ -32,19 +39,16 @@ export function AppInstall() {
     };
   }, []);
 
-  if (!installEvent) return null;
+  const install = useCallback(async () => {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    await installEvent.userChoice.catch(() => undefined);
+    setInstallEvent(null);
+  }, [installEvent]);
 
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        await installEvent.prompt();
-        await installEvent.userChoice.catch(() => undefined);
-        setInstallEvent(null);
-      }}
-      className="inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-indigo-200 bg-white px-3 text-sm font-bold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-600"
-    >
-      <Download size={16} /> <span className="hidden sm:inline">Install app</span><span className="sr-only sm:hidden">Install app</span>
-    </button>
-  );
+  return <InstallContext.Provider value={{ canInstall: Boolean(installEvent), install }}>{children}</InstallContext.Provider>;
+}
+
+export function useInstallPrompt() {
+  return useContext(InstallContext);
 }

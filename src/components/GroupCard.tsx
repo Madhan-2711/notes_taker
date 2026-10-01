@@ -34,7 +34,7 @@ export function GroupCard({ group, notes, onManage, onDelete }: GroupCardProps) 
       exit={{ opacity: 0, scale: 0.97 }}
       whileHover={{ y: -4 }}
       transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="glass neubrutal rounded-[var(--radius-xl)] overflow-hidden"
+      className="glass neubrutal rounded-card overflow-hidden"
     >
       {/* Main clickable area → navigates to group detail page */}
       <Link href={`/groups/${group.id}`} className="block group">

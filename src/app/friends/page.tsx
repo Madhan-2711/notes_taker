@@ -238,7 +238,7 @@ export default function FriendsPage() {
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass neubrutal rounded-[var(--radius-xl)] p-6 mb-6"
+        className="glass neubrutal rounded-card p-6 mb-6"
         aria-label="Your username"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -267,7 +267,7 @@ export default function FriendsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="glass neubrutal rounded-[var(--radius-xl)] p-6 mb-8"
+        className="glass neubrutal rounded-card p-6 mb-8"
       >
         <div className="flex items-center gap-2 mb-4">
           <UserPlus size={16} className="text-primary" />

@@ -144,12 +144,12 @@ export function ViewNoteModal({
             exit={{ opacity: 0, scale: 0.97, y: 28 }}
             transition={{ type: "spring" as const, stiffness: 300, damping: 26 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] w-full max-w-3xl h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            className="relative bg-white neubrutal rounded-card w-full max-w-3xl h-[90vh] flex flex-col shadow-2xl overflow-hidden"
           >
             {/* Top bar */}
             <div className="flex items-center justify-between gap-3 px-8 pt-6 pb-4 border-b border-border/30 shrink-0">
               <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                <ModeBadge mode={note.mode || "normal"} />
+                <ModeBadge mode={note.mode || "normal"} hideNormal />
                 {noteGroups.map((g) => (
                   <span
                     key={g.id}

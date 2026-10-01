@@ -1,19 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthButton } from "../components/AuthButton";
-import { Logo } from "../components/Logo";
-import { NavBar } from "../components/NavBar";
+import { AppHeader, MobileTabBar } from "../components/NavBar";
 import { AuthProvider } from "../contexts/AuthContext";
 import { UserKeysProvider } from "../contexts/UserKeysContext";
 import { NoteDraftProvider } from "../contexts/NoteDraftContext";
 import { NoteMetaProvider } from "../contexts/NoteMetaContext";
 import { ReminderNotifier } from "../components/ReminderNotifier";
-import { AppInstall } from "../components/AppInstall";
+import { InstallProvider } from "../components/AppInstall";
+import { InboxProvider } from "../contexts/InboxContext";
+import { ToastProvider } from "../contexts/ToastContext";
 import { UsernamePrompt } from "../components/UsernamePrompt";
 import { isIndexableDeployment, productionSiteUrl } from "../lib/seo";
 
-const inter = Inter({ subsets: ["latin"], display: "swap" });
+const geist = Geist({ subsets: ["latin"], display: "swap", variable: "--font-geist" });
+const geistMono = Geist_Mono({ subsets: ["latin"], display: "swap", variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
   metadataBase: productionSiteUrl() ?? undefined,
@@ -37,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -46,27 +47,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
-      <body className="min-h-screen flex flex-col" suppressHydrationWarning>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} font-sans`} suppressHydrationWarning>
+      <body className="flex min-h-dvh flex-col" suppressHydrationWarning>
+        <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[var(--z-prompt)] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:shadow-[var(--neubrutalism-shadow)]">
+          Skip to content
+        </a>
         <AuthProvider>
           <UserKeysProvider>
             <NoteMetaProvider>
             <NoteDraftProvider>
-            <header className="sticky top-0 z-50 glass border-b border-white/10">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
-                <Logo />
-                <div className="flex items-center gap-2">
-                  <AppInstall />
-                  <AuthButton />
-                </div>
-              </div>
-            </header>
-            <NavBar />
-            <main className="flex-1 flex flex-col">
+            <InstallProvider>
+            <InboxProvider>
+            <ToastProvider>
+            <AppHeader />
+            <main id="main" className="pb-tabbar flex flex-1 flex-col">
               {children}
             </main>
+            <MobileTabBar />
             <ReminderNotifier />
             <UsernamePrompt />
+            </ToastProvider>
+            </InboxProvider>
+            </InstallProvider>
             </NoteDraftProvider>
             </NoteMetaProvider>
           </UserKeysProvider>

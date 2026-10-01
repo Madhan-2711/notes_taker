@@ -78,16 +78,16 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={{ y: -5 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className="glass neubrutal rounded-[var(--radius-xl)] p-6 relative group flex flex-col gap-3 min-h-[160px]"
+      className="glass neubrutal rounded-card p-6 relative group flex flex-col gap-3 min-h-[160px]"
     >
       <button
         type="button"
-        className="absolute inset-0 z-10 rounded-[var(--radius-xl)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
+        className="absolute inset-0 z-10 rounded-card focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
         aria-label={`Open ${displayTitle}`}
         onClick={() => isCollabNote(note) ? router.push(`/collab/${note.id}`) : onView?.(note)}
       />
       <div className="flex items-center justify-between gap-2 min-h-11 sm:min-h-5">
-        <ModeBadge mode={note.mode || "normal"} compact />
+        <ModeBadge mode={note.mode || "normal"} />
         {/* Always visible on mobile, hover-reveal on desktop */}
         <div className="relative z-20 ml-auto flex items-center gap-1 sm:absolute sm:top-3 sm:right-3 sm:rounded-xl sm:bg-white/95 sm:shadow-sm sm:backdrop-blur sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
           {onTogglePin && <button type="button" onClick={() => onTogglePin(note.id)} aria-label={pinned ? `Unpin ${displayTitle}` : `Pin ${displayTitle}`} aria-pressed={pinned}

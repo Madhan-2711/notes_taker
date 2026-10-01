@@ -35,7 +35,7 @@ export function FriendCard({ friend, onRemove }: FriendCardProps) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="glass neubrutal rounded-[var(--radius-xl)] p-5 flex items-center gap-4 group"
+      className="glass neubrutal rounded-card p-5 flex items-center gap-4 group"
     >
       {/* Avatar */}
       <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">

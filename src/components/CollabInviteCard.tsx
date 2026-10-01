@@ -29,7 +29,7 @@ export function CollabInviteCard({ invite, onAccept, onReject }: CollabInviteCar
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="glass neubrutal rounded-[var(--radius-xl)] p-5 flex items-center gap-4"
+      className="glass neubrutal rounded-card p-5 flex items-center gap-4"
     >
       <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
         <Lock size={18} className="text-emerald-600" />

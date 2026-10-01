@@ -69,7 +69,7 @@ export function CreateGroupModal({ isOpen, onClose, notes, userId }: CreateGroup
             transition={{ type: "spring", stiffness: 300, damping: 26 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSubmit}
-            className="relative bg-white neubrutal rounded-[var(--radius-xl)] p-7 w-full max-w-lg flex flex-col gap-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="relative bg-white neubrutal rounded-card p-7 w-full max-w-lg flex flex-col gap-5 shadow-2xl max-h-[90vh] overflow-y-auto"
           >
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -145,7 +145,7 @@ export function CreateGroupModal({ isOpen, onClose, notes, userId }: CreateGroup
                 <button
                   type="submit"
                   disabled={!title.trim() || saving}
-                  className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-[var(--radius-xl)] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex items-center gap-2"
+                  className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex items-center gap-2"
                 >
                   <Check size={16} />
                   {saving ? "Creating..." : "Create Group"}
