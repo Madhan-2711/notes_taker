@@ -11,10 +11,10 @@ interface PageHeaderProps {
   actions?: ReactNode;
 }
 
-/** Shared page title row: one line on desktop, title above actions on phones. */
+/** Shared page title row; actions wrap below the title only when they do not fit beside it. */
 export function PageHeader({ title, subtitle, back, actions }: PageHeaderProps) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
       <div className="min-w-0">
         {back && (
           <Link href={back.href} className="-ml-2 mb-1 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900">

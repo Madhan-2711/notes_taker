@@ -63,17 +63,14 @@ export function NoteExport({ title, content, delta, images = null, encrypted = f
     }
   };
 
-  return <section className="my-5 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label="Export note">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h3 className="flex items-center gap-2 text-sm font-bold"><Download size={16} /> Take your words with you</h3>
-        <p className="mt-1 text-xs text-slate-600">Word and PDF keep formatting, checklists and pictures. Other attachments download separately.</p></div>
-      <div className="flex flex-wrap gap-2">
-        {FORMATS.map(({ value, label }) => <button key={value} type="button" disabled={busy !== null}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl border bg-white px-4 text-sm font-semibold hover:border-indigo-400 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-indigo-500"
-          onClick={() => void run(value)}>{busy === value && <Loader2 size={14} className="animate-spin" />}{label}</button>)}
-      </div>
+  return <section aria-label="Export note">
+    <p className="text-sm text-slate-700">Word and PDF keep formatting, checklists and pictures. Other attachments download separately.</p>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {FORMATS.map(({ value, label }) => <button key={value} type="button" disabled={busy !== null} className="btn-secondary" onClick={() => void run(value)}>
+        {busy === value ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Download size={15} aria-hidden="true" />}{label}
+      </button>)}
     </div>
-    {encrypted && <p className="mt-3 text-xs text-amber-800">Exported copies are decrypted and are no longer protected by your vault.</p>}
+    {encrypted && <p className="mt-3 text-xs text-amber-900">Exported copies are decrypted and are no longer protected by your vault.</p>}
     {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
   </section>;
 }

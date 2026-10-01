@@ -1,27 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   type Note,
   type Group,
   isSecureNote,
   isCollabNote,
-  getNoteTitle,
   getNoteContent,
 } from "../lib/validations";
 import { ModeBadge } from "./ModeBadge";
+import { Menu, type MenuItem } from "./ui/Menu";
 import { previewText } from "../lib/inlineImages";
 import { useNow } from "../hooks/useNow";
-import { Trash2, Pencil, Eye, Users, Pin, Bell } from "lucide-react";
+import { useNoteTitle } from "../hooks/useNoteTitle";
+import { Trash2, Pencil, Users, Pin, Bell, ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../hooks/useAuth";
-import { useUserKeysContext } from "../contexts/UserKeysContext";
-import { decryptNoteTitle } from "../lib/services/notes/noteTitles";
 
 interface NoteCardProps {
   note: Note;
   groups?: Group[];
+  /** Moves the note to trash; the page offers Undo. */
   onDelete: (id: string) => void;
   onEdit?: (note: Note) => void;
   onView?: (note: Note) => void;
@@ -34,114 +32,72 @@ interface NoteCardProps {
 
 export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true, tags = [], reminderAt = null }: NoteCardProps) {
   const router = useRouter();
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const now = useNow();
-  const { user } = useAuth();
-  const { privateKey } = useUserKeysContext();
-  const [decrypted, setDecrypted] = useState<{ id: string; title: string } | null>(null);
-
-  useEffect(() => {
-    if (!user || !privateKey || (!isSecureNote(note) && !isCollabNote(note))) return;
-    let cancelled = false;
-    void decryptNoteTitle(note, user.uid, privateKey).then((title) => {
-      if (!cancelled && title) setDecrypted({ id: note.id, title });
-    });
-    return () => { cancelled = true; };
-  }, [note, user, privateKey]);
+  const reduceMotion = useReducedMotion();
+  const displayTitle = useNoteTitle(note);
 
   // Derive groups this note belongs to
   const noteGroups = groups.filter((g) => note.groupIds?.includes(g.id));
 
-  const handleDelete = () => {
-    if (confirmDelete) {
-      onDelete(note.id);
-      setConfirmDelete(false);
-    } else {
-      setConfirmDelete(true);
-      setTimeout(() => setConfirmDelete(false), 3000);
-    }
-  };
-
-  const displayTitle = (decrypted?.id === note.id && decrypted.title.trim()) || getNoteTitle(note);
-
-  // Display content — encrypted notes show a placeholder, collab notes show collaborator info
+  // Encrypted notes show a placeholder until opened
   const displayContent = isSecureNote(note)
-    ? "This note is end-to-end encrypted. Open to decrypt and view."
+    ? "End-to-end encrypted. Open to read."
     : previewText(getNoteContent(note));
 
-  // Disable edit for collab notes (those use the Yjs editor)
+  const open = () => isCollabNote(note) ? router.push(`/collab/${note.id}`) : onView?.(note);
+  // Shared notes are edited in the live editor, not the edit dialog.
   const canEdit = !isCollabNote(note);
+
+  const menuItems: MenuItem[] = [
+    { label: "Open", icon: ExternalLink, onSelect: open },
+    ...(onEdit && canEdit ? [{ label: "Edit", icon: Pencil, onSelect: () => onEdit(note) }] : []),
+    ...(canDelete ? [{ label: "Move to trash", icon: Trash2, destructive: true, separated: true, onSelect: () => onDelete(note.id) }] : []),
+  ];
+
   return (
     <motion.article
-      initial={{ opacity: 0, y: 20 }}
+      layout={!reduceMotion}
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ y: -5 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className="glass neubrutal rounded-card p-6 relative group flex flex-col gap-3 min-h-[160px]"
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
+      transition={{ duration: 0.2 }}
+      className="card group relative flex min-h-44 flex-col gap-2 p-5 transition-[box-shadow,transform] duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[var(--neubrutalism-shadow-hover)] focus-within:-translate-x-0.5 focus-within:-translate-y-0.5"
     >
       <button
         type="button"
-        className="absolute inset-0 z-10 rounded-card focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
+        className="absolute inset-0 z-10 rounded-card focus-visible:outline-offset-4"
         aria-label={`Open ${displayTitle}`}
-        onClick={() => isCollabNote(note) ? router.push(`/collab/${note.id}`) : onView?.(note)}
+        onClick={open}
       />
-      <div className="flex items-center justify-between gap-2 min-h-11 sm:min-h-5">
+      <div className="flex items-center gap-1">
         <ModeBadge mode={note.mode || "normal"} />
-        {/* Always visible on mobile, hover-reveal on desktop */}
-        <div className="relative z-20 ml-auto flex items-center gap-1 sm:absolute sm:top-3 sm:right-3 sm:rounded-xl sm:bg-white/95 sm:shadow-sm sm:backdrop-blur sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
-          {onTogglePin && <button type="button" onClick={() => onTogglePin(note.id)} aria-label={pinned ? `Unpin ${displayTitle}` : `Pin ${displayTitle}`} aria-pressed={pinned}
-            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600 ${pinned ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"}`}><Pin size={16} fill={pinned ? "currentColor" : "none"} /></button>}
-          {onView && !isCollabNote(note) && (
+        <div className="relative z-20 -mr-2 -mt-2 ml-auto flex items-center">
+          {onTogglePin && (
             <button
-              onClick={(e) => { e.stopPropagation(); onView(note); }}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-indigo-600"
-              aria-label={`View ${displayTitle}`}
+              type="button"
+              onClick={() => onTogglePin(note.id)}
+              aria-label={pinned ? `Unpin ${displayTitle}` : `Pin ${displayTitle}`}
+              aria-pressed={pinned}
+              className={`icon-btn ${pinned ? "text-indigo-700 hover:text-indigo-800" : ""}`}
             >
-              <Eye size={16} />
+              <Pin size={17} fill={pinned ? "currentColor" : "none"} aria-hidden="true" />
             </button>
           )}
-          {onEdit && canEdit && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onEdit(note); }}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-indigo-50 hover:text-primary focus-visible:outline-2 focus-visible:outline-indigo-600"
-              aria-label={`Edit ${displayTitle}`}
-            >
-              <Pencil size={16} />
-            </button>
-          )}
-          {canDelete && <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600 ${
-              confirmDelete
-                ? "text-white bg-red-500 hover:bg-red-600"
-                : "text-foreground/50 hover:text-red-500 hover:bg-red-50"
-            }`}
-            aria-label={confirmDelete ? `Confirm moving ${displayTitle} to trash` : `Move ${displayTitle} to trash`}
-          >
-            <Trash2 size={16} />
-          </button>}
+          <Menu items={menuItems} label={`More actions for ${displayTitle}`} />
         </div>
       </div>
 
-      <h3 className="font-bold text-lg leading-snug font-sans break-words line-clamp-2" title={displayTitle}>
+      <h3 className="line-clamp-2 break-words text-lg font-bold leading-snug tracking-tight" title={displayTitle}>
         {displayTitle}
       </h3>
 
-      {confirmDelete && (
-        <div className="text-xs text-red-500 font-medium animate-pulse">
-          Tap again to move to trash
-        </div>
-      )}
-
-      <p className="text-foreground/70 text-sm flex-1 whitespace-pre-wrap break-words line-clamp-6">
+      <p className="line-clamp-5 flex-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
         {displayContent}
       </p>
 
-      {/* Collab collaborator count */}
       {isCollabNote(note) && note.collaboratorIds?.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
-          <Users size={12} />
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
+          <Users size={13} aria-hidden="true" />
           {note.collaboratorIds.length} collaborator{note.collaboratorIds.length !== 1 ? "s" : ""}
         </div>
       )}
@@ -149,44 +105,37 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
       {(tags.length > 0 || reminderAt) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {reminderAt && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${reminderAt < now ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
-              <Bell size={11} /> {new Date(reminderAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${reminderAt < now ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
+              <Bell size={12} aria-hidden="true" /> {new Date(reminderAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
           {tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">#{tag}</span>
+            <span key={tag} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-800">#{tag}</span>
           ))}
-          {tags.length > 3 && <span className="text-xs font-semibold text-foreground/40">+{tags.length - 3}</span>}
+          {tags.length > 3 && <span className="text-xs font-semibold text-slate-600">+{tags.length - 3}</span>}
         </div>
       )}
 
       {/* Footer: date + group badges */}
-      <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
-        <div className="text-xs text-foreground/40 font-mono shrink-0">
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+        <time dateTime={new Date(note.createdAt).toISOString()} className="shrink-0 text-xs tabular-nums text-slate-600">
           {new Date(note.createdAt).toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",
             hour: "2-digit",
             minute: "2-digit",
           })}
-        </div>
+        </time>
         {noteGroups.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {noteGroups.slice(0, 2).map((g) => (
-              <span
-                key={g.id}
-                className="text-xs font-semibold px-2 py-0.5 rounded-full border"
-                style={{
-                  backgroundColor: g.color + "18",
-                  borderColor: g.color + "40",
-                  color: g.color,
-                }}
-              >
+              <span key={g.id} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-800">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} aria-hidden="true" />
                 {g.title}
               </span>
             ))}
             {noteGroups.length > 2 && (
-              <span className="text-xs font-semibold text-foreground/40">
+              <span className="text-xs font-semibold text-slate-600">
                 +{noteGroups.length - 2}
               </span>
             )}

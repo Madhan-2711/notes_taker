@@ -11,7 +11,7 @@ import {
 } from "../lib/validations";
 import { ModeBadge } from "./ModeBadge";
 import { readSecureNote, updateSecureNote } from "../lib/services/notes/secureNotesService";
-import { motion, AnimatePresence } from "framer-motion";
+import { Dialog, useDialogTitleId } from "./ui/Dialog";
 import { X, Check, FolderOpen, ImagePlus, Lock, Users, Loader2 } from "lucide-react";
 import { setNoteGroupIds } from "../lib/groupsService";
 import { NoteAttachments } from "./NoteAttachments";
@@ -51,6 +51,7 @@ export function EditNoteModal({
   const attachmentsRef = useRef<HTMLDivElement>(null);
   const attachmentPickerRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<RichNoteEditorHandle>(null);
+  const titleId = useDialogTitleId();
 
   const load = (noteId: string, nextTitle: string, plain: string, rich: string | null | undefined) => {
     setTitle(nextTitle);
@@ -144,73 +145,55 @@ export function EditNoteModal({
     : false;
 
   return (
-    <AnimatePresence>
+    <Dialog open={Boolean(note)} onClose={onClose} labelledBy={titleId} size="xl" sheetOnMobile className="sm:h-[min(94dvh,960px)] sm:max-w-5xl">
       {note && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5"
-          onClick={onClose}
-        >
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-
-          <motion.form
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleSave}
-            className="relative flex h-[min(94dvh,960px)] w-full max-w-5xl flex-col overflow-hidden rounded-card border-2 border-slate-900 bg-white shadow-2xl"
-          >
+        <form onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
             {/* Header */}
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4 py-4 sm:px-8">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-8">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-bold tracking-tight">Edit Note</h2>
+                <h2 id={titleId} className="text-lg font-bold tracking-tight">Edit note</h2>
                 <ModeBadge mode={note.mode || "normal"} hideNormal />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 {isEditable && userId && (isNormalNote(note) || Boolean(privateKey)) && (
                   <button type="button" onClick={() => {
                     if (attachmentPickerRef.current && !attachmentPickerRef.current.disabled) attachmentPickerRef.current.click();
                     else attachmentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-200 px-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-500">
-                    <ImagePlus size={17} /> <span className="hidden sm:inline">Add image or file</span>
-                    <span className="sr-only sm:hidden">Add image or file</span>
+                    className="btn-secondary min-h-10 px-3" aria-label="Add image or file">
+                    <ImagePlus size={17} aria-hidden="true" /> <span className="hidden sm:inline">Add image or file</span>
                   </button>
                 )}
-                <button type="button" onClick={onClose} className="rounded-xl p-2 text-foreground/40 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-indigo-500" aria-label="Close editor">
-                  <X size={20} />
+                <button type="button" onClick={onClose} className="icon-btn" aria-label="Close editor">
+                  <X size={20} aria-hidden="true" />
                 </button>
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-8 sm:py-7">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-8 sm:py-7">
 
             {/* Decrypting state */}
             {isSecureNote(note) && decrypting && (
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-100">
-                <Loader2 size={18} className="text-indigo-500 animate-spin" />
-                <p className="text-sm text-indigo-700">Decrypting note...</p>
+              <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <Loader2 size={18} className="animate-spin text-indigo-700" aria-hidden="true" />
+                <p className="text-sm text-indigo-900">Decrypting note on this device…</p>
               </div>
             )}
 
             {/* Decrypt error */}
             {isSecureNote(note) && decryptError && (
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-100">
-                <Lock size={20} className="text-red-500 shrink-0" />
-                <p className="text-sm text-red-700">{decryptError}</p>
+              <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+                <Lock size={20} className="shrink-0 text-red-700" aria-hidden="true" />
+                <p className="text-sm text-red-800">{decryptError}</p>
               </div>
             )}
 
             {/* Collab note message */}
             {isCollabNote(note) && (
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-100">
-                <Users size={20} className="text-emerald-500 shrink-0" />
-                <p className="text-sm text-emerald-700">
-                  Collaborative notes are edited in the real-time collaborative editor.
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <Users size={20} className="shrink-0 text-emerald-700" aria-hidden="true" />
+                <p className="text-sm text-emerald-900">
+                  Shared notes are edited in the live editor.
                 </p>
               </div>
             )}
@@ -219,42 +202,37 @@ export function EditNoteModal({
             {isEditable && !decrypting && (
               <>
                 <div>
-                  <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
-                    Title
-                  </label>
+                  <label htmlFor="edit-note-title" className="label">Title</label>
                   <input
+                    id="edit-note-title"
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-transparent text-lg font-bold placeholder:text-foreground/25 focus:outline-none border-b border-border/50 pb-3 focus:border-primary transition-colors"
+                    className="w-full border-b border-slate-300 bg-transparent pb-3 text-xl font-bold transition-colors placeholder:text-slate-500 focus:border-primary-strong focus:outline-none"
                     maxLength={100}
+                    data-autofocus
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
-                    Content
-                  </label>
+                  <p className="label">Content</p>
                   {delta && loadedFor === note.id && (
                     <RichNoteEditor
                       key={note.id}
                       initial={delta}
                       label="Note content"
-                      placeholder="Start writing your thoughts..."
+                      placeholder="Start writing your thoughts…"
                       images={userId ? { noteId: note.id, userId, privateKey: privateKey ?? null } : null}
                       handleRef={editorRef}
                       onChange={(nextDelta, plain) => { setDelta(nextDelta); setContent(plain); }}
                     />
                   )}
-                  <p className={`mt-1 text-right text-xs ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-600" : "text-foreground/40"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>
+                  <p className={`mt-1 text-right text-xs tabular-nums ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-700" : "text-slate-600"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>
                 </div>
 
                 {groups.length > 0 && (
-                  <div>
-                    <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-3 flex items-center gap-1.5">
-                      <FolderOpen size={11} />
-                      Groups
-                    </label>
+                  <fieldset>
+                    <legend className="label flex items-center gap-1.5"><FolderOpen size={14} aria-hidden="true" /> Groups</legend>
                     <div className="flex flex-wrap gap-2">
                       {groups.map((g) => {
                         const isSelected = selectedGroupIds.includes(g.id);
@@ -262,30 +240,24 @@ export function EditNoteModal({
                           <button
                             key={g.id}
                             type="button"
+                            aria-pressed={isSelected}
                             onClick={() => handleToggleGroup(g.id)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all duration-150 ${
-                              isSelected
-                                ? "text-white border-transparent shadow-sm"
-                                : "bg-transparent border-border/50 text-foreground/50 hover:border-primary/40"
-                            }`}
-                            style={isSelected ? { backgroundColor: g.color, borderColor: g.color } : {}}
+                            className={`chip ${isSelected ? "border-indigo-700 bg-indigo-50 text-indigo-900" : "border-slate-300 bg-white text-slate-800 hover:border-indigo-500"}`}
                           >
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: isSelected ? "white" : g.color }}
-                            />
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} aria-hidden="true" />
                             {g.title}
+                            {isSelected && <Check size={13} aria-hidden="true" />}
                           </button>
                         );
                       })}
                     </div>
-                  </div>
+                  </fieldset>
                 )}
 
                 {userId && (isNormalNote(note) || (isSecureNote(note) && privateKey)) && (
                   <div ref={attachmentsRef} className="scroll-mt-4">
                     <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey ?? null} pickerRef={attachmentPickerRef} knownNote={note} onInsertImage={insertImage} onInsertText={(text) => editorRef.current?.insertText(text)} />
-                    <p className="text-xs leading-5 text-foreground/50">Files upload immediately, even if you close this editor without saving text changes.</p>
+                    <p className="text-xs leading-5 text-slate-600">Files upload immediately, even if you close this editor without saving text changes.</p>
                   </div>
                 )}
 
@@ -293,38 +265,34 @@ export function EditNoteModal({
             )}
             </div>
 
-            {isEditable && !decrypting && (
-                <div className="flex shrink-0 flex-col gap-2 border-t border-border/50 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            {isEditable && !decrypting ? (
+                <div className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:px-8">
                   <div className="min-w-0 flex-1">
-                    {error && <span role="alert" className="text-sm text-red-500 font-medium">{error}</span>}
+                    {error && <span role="alert" className="text-sm font-medium text-red-700">{error}</span>}
                   </div>
-                  <div className="flex items-center justify-end gap-3">
-                    <button type="button" onClick={onClose} className="px-5 py-2 text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
+                  <div className="flex items-center justify-end gap-2">
+                    <button type="button" onClick={onClose} className="btn-quiet">
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={!title.trim() || !content.trim() || saving}
-                      className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex items-center gap-2"
+                      className="btn-primary"
                     >
-                      <Check size={16} />
-                      {saving ? "Saving..." : "Save Changes"}
+                      {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+                      {saving ? "Saving…" : "Save changes"}
                     </button>
                   </div>
                 </div>
-            )}
-
-            {/* Close button for non-editable modes */}
-            {(!isEditable || decrypting) && !isEditable && (
-              <div className="flex shrink-0 justify-end border-t border-border/50 px-4 py-3 sm:px-8">
-                <button type="button" onClick={onClose} className="px-5 py-2 text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
+            ) : (
+              <div className="flex shrink-0 justify-end border-t border-slate-200 px-4 py-3 sm:px-8">
+                <button type="button" onClick={onClose} className="btn-quiet">
                   Close
                 </button>
               </div>
             )}
-          </motion.form>
-        </motion.div>
+        </form>
       )}
-    </AnimatePresence>
+    </Dialog>
   );
 }

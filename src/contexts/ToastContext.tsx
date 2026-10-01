@@ -52,13 +52,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={show}>
       {children}
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[var(--z-toast)] flex justify-center px-4 md:bottom-6" role="status" aria-live="polite">
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {toast && (
             <motion.div
               key={toast.id}
               initial={reduceMotion ? false : { opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: reduceMotion ? 0 : 16 }}
+              transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
               className={`pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-xl border-2 border-slate-900 py-2 pl-4 pr-2 text-sm font-medium shadow-[var(--neubrutalism-shadow)] ${toast.tone === "error" ? "bg-red-50 text-red-900" : "bg-slate-900 text-white"}`}
             >
               <span className="min-w-0 flex-1">{toast.message}</span>

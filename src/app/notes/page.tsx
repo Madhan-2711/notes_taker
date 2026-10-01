@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
 import { hasValidConfig } from "../../lib/firebaseConfig";
@@ -11,21 +11,27 @@ import {
   subscribeToNotes,
   updateNormalNote,
   deleteNote,
-  moveNoteToTrash,
   restoreNote,
 } from "../../lib/services/notes/normalNotesService";
 import { deleteCollabNote } from "../../lib/services/notes/collaborativeNotesService";
 import { NoteCard } from "../../components/NoteCard";
 import { EditNoteModal } from "../../components/EditNoteModal";
 import { ViewNoteModal } from "../../components/ViewNoteModal";
+import { PageHeader } from "../../components/PageHeader";
+import { CardSkeletons, EmptyState, PageLoading, SignInRequired } from "../../components/PageState";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Calendar, X, FolderOpen, Lock, Unlock, Users, Layers, Search, SlidersHorizontal, RotateCcw, Trash2, Pin, Archive, Bell, Hash, NotebookText } from "lucide-react";
+import { Calendar, X, Search, SlidersHorizontal, RotateCcw, Trash2, Pin, Archive, Bell, NotebookText, Plus, Lock, ChevronDown, Layers } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildSearchIndex } from "../../lib/noteSearch";
 import { useNotePins } from "../../hooks/useNotePins";
+import { useNoteTitle } from "../../hooks/useNoteTitle";
+import { useTrashWithUndo } from "../../hooks/useTrashWithUndo";
 import { useNoteMeta } from "../../contexts/NoteMetaContext";
+import { useToast } from "../../contexts/ToastContext";
 import { EMPTY_META, normalizeTag } from "../../lib/noteMeta";
+import { NOTE_MODES } from "../../lib/noteModes";
 
 type NotesView = "active" | "archived" | "reminders";
 
@@ -35,15 +41,34 @@ function localDateKey(timestamp: number): string {
 }
 
 const MODE_FILTERS: { value: NoteMode | ""; label: string; icon: typeof Lock }[] = [
-  { value: "", label: "All", icon: Layers },
-  { value: "normal", label: "Normal", icon: Unlock },
-  { value: "secure", label: "Encrypted", icon: Lock },
-  { value: "collab", label: "Collab", icon: Users },
+  { value: "", label: "All types", icon: Layers },
+  ...NOTE_MODES.map(({ value, label, icon }) => ({ value, label, icon })),
 ];
+
+const chipClass = (active: boolean) =>
+  `chip ${active ? "border-indigo-700 bg-indigo-700 text-white" : "border-slate-300 bg-white text-slate-800 hover:border-indigo-500 hover:text-indigo-800"}`;
+
+function TrashCard({ note, onRestore, onDeleteForever }: { note: Note; onRestore: () => void; onDeleteForever: () => void }) {
+  const title = useNoteTitle(note);
+  return (
+    <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="panel flex flex-col p-5">
+      <h4 className="truncate text-base font-bold text-slate-900">{title}</h4>
+      <p className="mt-1 text-sm text-slate-600">Deleted {new Date(note.deletedAt!).toLocaleDateString()}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        <button type="button" onClick={onRestore} className="btn-secondary">
+          <RotateCcw size={16} aria-hidden="true" /> Restore
+        </button>
+        <button type="button" onClick={onDeleteForever} className="btn min-h-11 px-3 text-red-700 hover:bg-red-50">
+          Delete forever
+        </button>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function NotesPage() {
   return (
-    <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" /></div>}>
+    <Suspense fallback={<PageLoading label="Loading notes" />}>
       <NotesPageContent />
     </Suspense>
   );
@@ -56,9 +81,11 @@ function NotesPageContent() {
   const { privateKey } = useUserKeys();
   const { pinnedIds, toggle: togglePin } = useNotePins(user?.uid);
   const { metaByNote } = useNoteMeta();
+  const toast = useToast();
+  const trashNote = useTrashWithUndo();
   const [view, setView] = useState<NotesView>("active");
   const [tagFilter, setTagFilter] = useState("");
-  const [notes, setNotes] = useState<Note[]>([]);
+  const [notes, setNotes] = useState<Note[] | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [dateFilter, setDateFilter] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
@@ -67,12 +94,15 @@ function NotesPageContent() {
   const [searchIndex, setSearchIndex] = useState<Map<string, string>>(new Map());
   const [searching, setSearching] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Note | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [dismissedLinkedId, setDismissedLinkedId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const allNotes = useMemo(() => notes ?? [], [notes]);
   const linkedNote = linkedNoteId && dismissedLinkedId !== linkedNoteId
-    ? notes.find((note) => note.id === linkedNoteId && !isCollabNote(note)) ?? null
+    ? allNotes.find((note) => note.id === linkedNoteId && !isCollabNote(note)) ?? null
     : null;
   const activeViewNote = viewingNote ?? linkedNote;
 
@@ -101,19 +131,31 @@ function NotesPageContent() {
     return () => unsub();
   }, [user]);
 
-  const handleDeleteNote = async (id: string) => {
-    if (!user || !hasValidConfig) return;
-    try { setDeleteError(""); await moveNoteToTrash(id); }
-    catch (e) { setDeleteError(e instanceof Error ? e.message : "Could not move note to trash."); }
-  };
+  // "/" jumps to search from anywhere on the page, unless the user is typing somewhere.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement;
+      if (target.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handlePermanentDelete = async (note: Note) => {
-    if (!user || note.authorId !== user.uid || !window.confirm("Permanently delete this note and its files? This cannot be undone.")) return;
-    try {
-      setDeleteError("");
-      if (isCollabNote(note)) await deleteCollabNote(note.id);
-      else await deleteNote(note.id);
-    } catch (caught) { setDeleteError(caught instanceof Error ? caught.message : "Could not permanently delete note."); }
+    if (!user || note.authorId !== user.uid) return;
+    if (isCollabNote(note)) await deleteCollabNote(note.id);
+    else await deleteNote(note.id);
+    setConfirmDelete(null);
+    toast({ message: "Note deleted forever" });
+  };
+
+  const handleRestore = (note: Note) => {
+    void restoreNote(note.id)
+      .then(() => toast({ message: "Note restored" }))
+      .catch((caught) => toast({ message: caught instanceof Error ? caught.message : "Could not restore note.", tone: "error" }));
   };
 
   const handleUpdateNote = async (id: string, title: string, content: string, richContent: string) => {
@@ -127,19 +169,19 @@ function NotesPageContent() {
     let active = true;
     const timer = window.setTimeout(() => {
       setSearching(true);
-      buildSearchIndex(notes, user.uid, privateKey).then((index) => {
+      buildSearchIndex(allNotes, user.uid, privateKey).then((index) => {
         if (active) setSearchIndex(index);
       }).finally(() => { if (active) setSearching(false); });
     }, 200);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [searchActive, notes, user, privateKey]);
+  }, [searchActive, allNotes, user, privateKey]);
 
-  // Filter notes by date, group, and mode
+  // Filter notes by view, date, group, type, tag and search
   const filteredNotes = useMemo(() => {
     const term = searchTerm.trim().toLocaleLowerCase();
     const matchingGroupIds = term ? new Set(groups.filter((group) => group.title.toLocaleLowerCase().includes(term)).map((group) => group.id)) : new Set<string>();
     const tagTerm = normalizeTag(term);
-    return notes.filter((note) => {
+    return allNotes.filter((note) => {
       if (showTrash ? (!note.deletedAt || note.authorId !== user?.uid) : Boolean(note.deletedAt)) return false;
       const meta = metaByNote.get(note.id) ?? EMPTY_META;
       if (!showTrash) {
@@ -161,7 +203,7 @@ function NotesPageContent() {
         || (tagTerm !== "" && meta.tags.some((tag) => tag.includes(tagTerm)));
       return matchesDate && matchesGroup && matchesMode && matchesSearch;
     });
-  }, [notes, groups, dateFilter, groupFilter, modeFilter, searchTerm, searchIndex, showTrash, user?.uid, metaByNote, view, tagFilter]);
+  }, [allNotes, groups, dateFilter, groupFilter, modeFilter, searchTerm, searchIndex, showTrash, user?.uid, metaByNote, view, tagFilter]);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -170,12 +212,13 @@ function NotesPageContent() {
   }, [metaByNote]);
 
   const viewCounts = useMemo(() => {
-    const live = notes.filter((note) => !note.deletedAt);
+    const live = allNotes.filter((note) => !note.deletedAt);
     return {
       archived: live.filter((note) => metaByNote.get(note.id)?.archived).length,
       reminders: live.filter((note) => metaByNote.get(note.id)?.reminderAt != null).length,
+      trash: allNotes.filter((note) => note.deletedAt && note.authorId === user?.uid).length,
     };
-  }, [notes, metaByNote]);
+  }, [allNotes, metaByNote, user?.uid]);
 
   const cardMeta = (noteId: string) => {
     const meta = metaByNote.get(noteId) ?? EMPTY_META;
@@ -195,241 +238,198 @@ function NotesPageContent() {
     return grouped;
   }, [filteredNotes, pinnedIds, showTrash]);
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading label="Loading notes" />;
+  if (!user) return <SignInRequired>Sign in to view your notes.</SignInRequired>;
 
-  if (!user) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto gap-4">
-        <p className="text-foreground/60 text-lg">Please sign in to view your notes.</p>
-      </div>
-    );
-  }
+  const activeFilters = [
+    modeFilter && { key: "mode", label: NOTE_MODES.find((mode) => mode.value === modeFilter)?.label ?? modeFilter, clear: () => setModeFilter("") },
+    dateFilter && { key: "date", label: new Date(`${dateFilter}T00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }), clear: () => setDateFilter("") },
+    groupFilter && { key: "group", label: groups.find((group) => group.id === groupFilter)?.title ?? "Group", clear: () => setGroupFilter("") },
+    tagFilter && { key: "tag", label: `#${tagFilter}`, clear: () => setTagFilter("") },
+  ].filter(Boolean) as { key: string; label: string; clear: () => void }[];
+  const clearAllFilters = () => { setModeFilter(""); setDateFilter(""); setGroupFilter(""); setTagFilter(""); };
+
+  const tabs = [
+    { key: "active", label: "Notes", icon: NotebookText, count: null },
+    { key: "reminders", label: "Reminders", icon: Bell, count: viewCounts.reminders },
+    { key: "archived", label: "Archived", icon: Archive, count: viewCounts.archived },
+  ] as const;
+  const currentTab = showTrash ? "trash" : view;
+  const pinnedVisible = !showTrash ? filteredNotes.filter((note) => pinnedIds.has(note.id)) : [];
 
   return (
     <>
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
-        >
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-foreground transition-colors">
-              <ArrowLeft size={16} /> Home
-            </Link>
-            <div className="h-4 w-px bg-border"></div>
-            <h1 className="text-2xl font-bold tracking-tight">My Notes</h1>
-            <span className="text-sm text-foreground/40 font-medium">
-              {filteredNotes.length} {filteredNotes.length === 1 ? "note" : "notes"}
-            </span>
-          </div>
+      <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <PageHeader
+          title="Notes"
+          subtitle={notes === null ? "Loading…" : `${filteredNotes.length} ${filteredNotes.length === 1 ? "note" : "notes"}${showTrash ? " in trash" : ""}`}
+          actions={<Link href="/write" className="btn-primary md:hidden"><Plus size={16} aria-hidden="true" /> New note</Link>}
+        />
 
-          {/* Date Filter */}
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <div className="relative min-w-0 flex-1 sm:w-56">
-            <Calendar size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden="true" />
-            <input
-              type="date"
-              aria-label="Filter notes by date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              onClick={(event) => {
-                try { event.currentTarget.showPicker?.(); } catch { /* Native date input remains usable. */ }
-              }}
-              className="h-12 w-full cursor-pointer rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm font-semibold text-slate-900 shadow-sm transition-colors hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600"
-            />
-            </div>
-            {dateFilter && (
-              <button
-                type="button"
-                onClick={() => setDateFilter("")}
-                className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600"
-              >
-                <X size={12} /> Clear
-              </button>
-            )}
-          </div>
-        </motion.div>
+        <div className="relative mb-4">
+          <label htmlFor="note-search" className="sr-only">Search notes</label>
+          <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden="true" />
+          <input
+            ref={searchRef}
+            id="note-search"
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search titles, writing, groups or #tags"
+            aria-describedby={searchActive ? "search-status" : undefined}
+            className="h-12 w-full rounded-xl border-2 border-slate-900 bg-white pl-11 pr-12 text-[15px] text-slate-900 shadow-[3px_3px_0_0_#0f172a] placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
+          />
+          <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-300 px-1.5 text-xs font-semibold text-slate-600 sm:block" aria-hidden="true">/</kbd>
+        </div>
+        {searchActive && <p id="search-status" role="status" className="-mt-2 mb-4 text-xs font-medium text-slate-600">{searching ? "Searching notes on this device…" : privateKey ? "Private notes are searched only after local decryption." : "Unlock your vault to search encrypted note content."}</p>}
 
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          {showTrash ? (
-            <p className="text-sm font-medium text-slate-700">Deleted notes stay here until you permanently remove them.</p>
-          ) : (
-            <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
-              {([
-                { value: "active", label: "Notes", icon: NotebookText },
-                { value: "archived", label: `Archived (${viewCounts.archived})`, icon: Archive },
-                { value: "reminders", label: `Reminders (${viewCounts.reminders})`, icon: Bell },
-              ] as const).map(({ value, label, icon: Icon }) => (
-                <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}
-                  className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-indigo-600 ${view === value ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-800 hover:border-indigo-400"}`}>
-                  <Icon size={16} /> {label}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div role="group" aria-label="Show" className="scrollbar-hide -mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            {tabs.map(({ key, label, icon: Icon, count }) => {
+              const selected = currentTab === key;
+              return (
+                <button key={key} type="button" aria-pressed={selected} onClick={() => { setShowTrash(false); setView(key); }}
+                  className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-colors ${selected ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-200/70 hover:text-slate-900"}`}>
+                  <Icon size={16} className="hidden sm:block" aria-hidden="true" /> {label}
+                  {count !== null && count > 0 && <span className={`tabular-nums ${selected ? "text-slate-300" : "text-slate-500"}`}>{count}</span>}
                 </button>
-              ))}
-            </div>
-          )}
-          <button type="button" onClick={() => setShowTrash((value) => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600">
-            {showTrash ? <RotateCcw size={17} /> : <Trash2 size={17} />}{showTrash ? "Back to notes" : `Trash (${notes.filter((note) => note.deletedAt && note.authorId === user.uid).length})`}
+              );
+            })}
+            <span className="mx-1 my-2 w-px shrink-0 bg-slate-300" aria-hidden="true" />
+            <button type="button" aria-pressed={showTrash} onClick={() => setShowTrash(true)}
+              className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-colors ${showTrash ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-200/70 hover:text-slate-900"}`}>
+              <Trash2 size={16} className="hidden sm:block" aria-hidden="true" /> Trash {viewCounts.trash > 0 && <span className={`tabular-nums ${showTrash ? "text-slate-300" : "text-slate-500"}`}>{viewCounts.trash}</span>}
+            </button>
+          </div>
+          <button type="button" aria-expanded={filtersOpen} aria-controls="note-filters" onClick={() => setFiltersOpen((open) => !open)} className="btn-secondary self-start sm:self-auto">
+            <SlidersHorizontal size={16} aria-hidden="true" /> Filters
+            {activeFilters.length > 0 && <span className="rounded-full bg-indigo-700 px-1.5 text-xs font-bold text-white">{activeFilters.length}</span>}
+            <ChevronDown size={16} className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} aria-hidden="true" />
           </button>
         </div>
-        {deleteError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">{deleteError}</p>}
 
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <label htmlFor="note-search" className="mb-2 block text-sm font-bold text-slate-800">Search your notes</label>
-          <div className="relative">
-            <Search size={19} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden="true" />
-            <input id="note-search" type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search titles, writing, or groups"
-              className="h-12 w-full rounded-xl border border-slate-300 bg-slate-50 pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-600 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-200" />
-          </div>
-          {searchActive && <p role="status" className="mt-2 text-xs font-medium text-slate-600">{searching ? "Searching notes on this device…" : privateKey ? "Private notes are searched only after local decryption." : "Unlock your vault to search encrypted note content."}</p>}
-        </div>
-
-        <details className="mb-6 rounded-2xl border border-slate-200 bg-white/85 px-4 py-3">
-          <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold text-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-600"><SlidersHorizontal size={17} /> Filters {(modeFilter || groupFilter || tagFilter) && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">Active</span>}</summary>
-          <div className="pt-3">
-        {/* Mode Filter Chips */}
-        <motion.div
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.03 }}
-          className="flex items-center gap-2 flex-wrap mb-4"
-        >
-          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/40 mr-1">
-            <Layers size={13} />
-            <span>Type:</span>
-          </div>
-          {MODE_FILTERS.map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setModeFilter(value)}
-              aria-pressed={modeFilter === value}
-              className={`flex min-h-10 items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
-                modeFilter === value
-                  ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
-              }`}
-            >
-              <Icon size={12} />
-              {label}
-            </button>
-          ))}
-        </motion.div>
-
-        {/* Group Filter Chips */}
-        {groups.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="flex items-center gap-2 flex-wrap mb-8"
-          >
-            <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/40 mr-1">
-              <FolderOpen size={13} />
-              <span>Groups:</span>
+        {filtersOpen && (
+          <div id="note-filters" className="panel mb-4 grid gap-5 p-4 sm:p-5 md:grid-cols-2">
+            <fieldset>
+              <legend className="label">Type</legend>
+              <div className="flex flex-wrap gap-2">
+                {MODE_FILTERS.map(({ value, label, icon: Icon }) => (
+                  <button key={value || "all"} type="button" onClick={() => setModeFilter(value)} aria-pressed={modeFilter === value} className={chipClass(modeFilter === value)}>
+                    <Icon size={13} aria-hidden="true" /> {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <div>
+              <label htmlFor="note-date" className="label">Created on</label>
+              <div className="relative max-w-xs">
+                <Calendar size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden="true" />
+                <input
+                  id="note-date"
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  onClick={(event) => {
+                    try { event.currentTarget.showPicker?.(); } catch { /* Native date input remains usable. */ }
+                  }}
+                  className="field cursor-pointer pl-9"
+                />
+              </div>
             </div>
-
-            <button
-              onClick={() => setGroupFilter("")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 ${
-                !groupFilter
-                  ? "bg-foreground text-background border-foreground"
-                  : "bg-transparent text-foreground/50 border-border/60 hover:border-foreground/40 hover:text-foreground"
-              }`}
-            >
-              All
-            </button>
-
-            {groups.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => setGroupFilter(groupFilter === g.id ? "" : g.id)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border-2 transition-all duration-200 ${
-                  groupFilter === g.id ? "text-white border-transparent" : "bg-transparent border-border/50 text-foreground/60 hover:text-foreground"
-                }`}
-                style={groupFilter === g.id ? { backgroundColor: g.color, borderColor: g.color } : {}}
-              >
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: groupFilter === g.id ? "white" : g.color }} />
-                {g.title}
-              </button>
-            ))}
-          </motion.div>
+            {groups.length > 0 && (
+              <fieldset>
+                <legend className="label">Group</legend>
+                <div className="flex flex-wrap gap-2">
+                  {groups.map((g) => (
+                    <button key={g.id} type="button" aria-pressed={groupFilter === g.id} onClick={() => setGroupFilter(groupFilter === g.id ? "" : g.id)} className={chipClass(groupFilter === g.id)}>
+                      <span className="h-2 w-2 shrink-0 rounded-full ring-1 ring-white" style={{ backgroundColor: g.color }} aria-hidden="true" />
+                      {g.title}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {allTags.length > 0 && (
+              <fieldset>
+                <legend className="label">Tag</legend>
+                <div className="flex flex-wrap gap-2">
+                  {allTags.map((tag) => (
+                    <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? "" : tag)} className={chipClass(tagFilter === tag)}>
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+          </div>
         )}
 
-        {allTags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-foreground/40">
-              <Hash size={13} />
-              <span>Tags:</span>
-            </div>
-            {allTags.map((tag) => (
-              <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? "" : tag)}
-                className={`min-h-10 rounded-full border px-3.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500 ${tagFilter === tag ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300"}`}>
-                #{tag}
+        {activeFilters.length > 0 && (
+          <div className="mb-5 flex flex-wrap items-center gap-2" aria-label="Active filters">
+            {activeFilters.map((filter) => (
+              <button key={filter.key} type="button" onClick={filter.clear} className="chip border-indigo-300 bg-indigo-50 text-indigo-900 hover:border-indigo-600" aria-label={`Remove filter ${filter.label}`}>
+                {filter.label} <X size={13} aria-hidden="true" />
               </button>
             ))}
+            <button type="button" onClick={clearAllFilters} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-slate-700 underline-offset-2 hover:underline">Clear all</button>
           </div>
         )}
-          </div>
-        </details>
 
-        {!showTrash && filteredNotes.some((note) => pinnedIds.has(note.id)) && <section className="mb-8" aria-label="Pinned notes">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"><Pin size={16} /> Pinned</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredNotes.filter((note) => pinnedIds.has(note.id)).map((note) => <NoteCard key={note.id} note={note} groups={groups} onDelete={handleDeleteNote} onEdit={setEditingNote} onView={setViewingNote} pinned canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} {...cardMeta(note.id)} />)}
-          </div>
-        </section>}
+        {showTrash && <p className="mb-5 text-sm text-slate-700">Notes in trash stay here until you restore them or delete them forever.</p>}
 
-        {/* Notes grouped by date */}
-        {Object.keys(groupedNotes).length > 0 ? (
-          <div className="space-y-10">
-            {Object.entries(groupedNotes).map(([dateLabel, dateNotes]) => (
-              <motion.section key={dateLabel} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-5 flex items-center gap-3">
-                  <span>{dateLabel}</span>
-                  <span className="flex-1 h-px bg-border/50"></span>
-                  <span className="text-foreground/25">{dateNotes.length}</span>
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        {notes === null ? (
+          <CardSkeletons count={6} />
+        ) : (
+          <>
+            {pinnedVisible.length > 0 && (
+              <section className="mb-10" aria-labelledby="pinned-heading">
+                <h2 id="pinned-heading" className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-900"><Pin size={16} aria-hidden="true" /> Pinned</h2>
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   <AnimatePresence>
-                    {dateNotes.map((note) => showTrash ? (
-                      <div key={note.id} className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
-                        <h4 className="truncate text-base font-bold text-slate-900">{note.mode === "secure" ? "Encrypted note" : note.title}</h4>
-                        <p className="mt-2 text-sm text-slate-600">Deleted {new Date(note.deletedAt!).toLocaleDateString()}</p>
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <button type="button" onClick={() => void restoreNote(note.id).catch((caught) => setDeleteError(caught instanceof Error ? caught.message : "Could not restore note."))} className="min-h-11 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 focus-visible:outline-2 focus-visible:outline-indigo-600">Restore</button>
-                          <button type="button" onClick={() => void handlePermanentDelete(note)} className="min-h-11 rounded-xl border border-red-300 bg-red-50 px-3 text-sm font-bold text-red-800 focus-visible:outline-2 focus-visible:outline-indigo-600">Delete forever</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <NoteCard key={note.id} note={note} groups={groups} onDelete={handleDeleteNote} onEdit={setEditingNote} onView={setViewingNote} pinned={pinnedIds.has(note.id)} canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} {...cardMeta(note.id)} />
-                    ))}
+                    {pinnedVisible.map((note) => <NoteCard key={note.id} note={note} groups={groups} onDelete={(id) => void trashNote(id)} onEdit={setEditingNote} onView={setViewingNote} pinned canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} {...cardMeta(note.id)} />)}
                   </AnimatePresence>
                 </div>
-              </motion.section>
-            ))}
-          </div>
-        ) : filteredNotes.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="py-24 text-center text-foreground/40 font-medium flex flex-col items-center gap-4"
-          >
-            <div className="w-16 h-16 border-2 border-dashed border-border rounded-full flex items-center justify-center">🍃</div>
-            {showTrash ? <p>Trash is empty.</p> : view === "archived" ? <p>No archived notes.</p> : view === "reminders" ? <p>No reminders set. Open a note to add one.</p> : dateFilter || groupFilter || modeFilter || tagFilter || searchTerm ? (
-              <p>No notes found for the selected filters.</p>
-            ) : (
-              <p>Your space is empty. Start writing to see your notes here.</p>
+              </section>
             )}
-          </motion.div>
-        ) : null}
+
+            {Object.keys(groupedNotes).length > 0 ? (
+              <div className="space-y-10">
+                {Object.entries(groupedNotes).map(([dateLabel, dateNotes]) => (
+                  <section key={dateLabel} aria-label={dateLabel}>
+                    <h3 className="mb-4 flex items-center gap-3 text-sm font-semibold text-slate-700">
+                      <span>{dateLabel}</span>
+                      <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+                      <span className="tabular-nums text-slate-500">{dateNotes.length}</span>
+                    </h3>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      <AnimatePresence>
+                        {dateNotes.map((note) => showTrash ? (
+                          <TrashCard key={note.id} note={note} onRestore={() => handleRestore(note)} onDeleteForever={() => setConfirmDelete(note)} />
+                        ) : (
+                          <NoteCard key={note.id} note={note} groups={groups} onDelete={(id) => void trashNote(id)} onEdit={setEditingNote} onView={setViewingNote} pinned={pinnedIds.has(note.id)} canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} {...cardMeta(note.id)} />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : filteredNotes.length === 0 ? (
+              showTrash ? (
+                <EmptyState icon={<Trash2 size={22} />} title="Trash is empty" description="Notes you move to trash appear here." />
+              ) : searchActive || activeFilters.length > 0 ? (
+                <EmptyState icon={<Search size={22} />} title="No matching notes" description="Try a different search or remove a filter."
+                  action={<button type="button" onClick={() => { setSearchTerm(""); clearAllFilters(); }} className="btn-secondary">Clear search and filters</button>} />
+              ) : view === "archived" ? (
+                <EmptyState icon={<Archive size={22} />} title="No archived notes" description="Archive a note from its menu to tuck it away without deleting it." />
+              ) : view === "reminders" ? (
+                <EmptyState icon={<Bell size={22} />} title="No reminders set" description="Open a note and choose Reminder to get notified." />
+              ) : (
+                <EmptyState icon={<NotebookText size={22} />} title="No notes yet" description="Your notes will appear here, grouped by the day you wrote them."
+                  action={<Link href="/write" className="btn-primary"><Plus size={16} aria-hidden="true" /> New note</Link>} />
+              )
+            ) : null}
+          </>
+        )}
       </div>
 
       {/* Edit Modal */}
@@ -449,6 +449,19 @@ function NotesPageContent() {
         onEdit={(note) => { setViewingNote(null); clearLinkedNote(); setEditingNote(note); }}
         userId={user?.uid}
         privateKey={privateKey}
+        pinned={activeViewNote ? pinnedIds.has(activeViewNote.id) : false}
+        onTogglePin={(id) => void togglePin(id)}
+        onTrash={activeViewNote && activeViewNote.authorId === user.uid ? (note) => { setViewingNote(null); clearLinkedNote(); void trashNote(note.id); } : undefined}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete this note forever?"
+        description="The note and its files will be permanently removed. This can't be undone."
+        confirmLabel="Delete forever"
+        destructive
+        onConfirm={() => confirmDelete ? handlePermanentDelete(confirmDelete) : undefined}
+        onCancel={() => setConfirmDelete(null)}
       />
     </>
   );
