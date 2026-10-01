@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { type FriendRequest } from "../lib/validations";
-import { Check, X, Clock } from "lucide-react";
-import Image from "next/image";
+import { Check, X, Clock, Loader2 } from "lucide-react";
+import { Avatar } from "./Avatar";
 
 interface FriendRequestCardProps {
   request: FriendRequest;
@@ -14,108 +14,72 @@ interface FriendRequestCardProps {
   onReject?: (requestId: string) => Promise<void>;
 }
 
+const STATUS = {
+  pending: { label: "Pending", icon: Clock, tone: "border-amber-300 bg-amber-50 text-amber-900" },
+  accepted: { label: "Accepted", icon: Check, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+  rejected: { label: "Declined", icon: X, tone: "border-red-200 bg-red-50 text-red-800" },
+} as const;
+
 export function FriendRequestCard({
   request,
   direction,
   onAccept,
   onReject,
 }: FriendRequestCardProps) {
-  const [loading, setLoading] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
+  const [error, setError] = useState("");
 
   const displayName = direction === "incoming" ? request.senderName : request.receiverName;
   const displayEmail = direction === "incoming" ? request.senderEmail : request.receiverEmail;
   const displayPhoto = direction === "incoming" ? request.senderPhoto : request.receiverPhoto;
 
-  const handleAccept = async () => {
-    if (!onAccept) return;
-    setLoading(true);
+  const run = async (kind: "accept" | "decline", action?: (id: string) => Promise<void>) => {
+    if (!action) return;
+    setBusy(kind);
+    setError("");
     try {
-      await onAccept(request.id);
+      await action(request.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That didn't work. Please try again.");
     } finally {
-      setLoading(false);
+      setBusy(null);
     }
   };
 
-  const handleReject = async () => {
-    if (!onReject) return;
-    setLoading(true);
-    try {
-      await onReject(request.id);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const status = STATUS[request.status as keyof typeof STATUS];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
+    <motion.li
+      layout={!reduceMotion}
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="glass neubrutal rounded-card p-5 flex items-center gap-4"
+      exit={{ opacity: 0 }}
+      className="py-4 first:pt-0 last:pb-0"
     >
-      {/* Avatar */}
-      <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
-        {displayPhoto ? (
-          <Image
-            src={displayPhoto}
-            alt={displayName}
-            width={44}
-            height={44}
-            className="w-full h-full object-cover rounded-full"
-          />
-        ) : (
-          displayName?.charAt(0)?.toUpperCase() || "?"
+      <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
+        <Avatar name={displayName} photoURL={displayPhoto} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold text-slate-900">{displayName}</p>
+          <p className="truncate text-sm text-slate-600">{displayEmail}</p>
+        </div>
+
+        {direction === "incoming" ? (
+          <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+            <button type="button" onClick={() => void run("accept", onAccept)} disabled={busy !== null} className="btn-primary flex-1 sm:flex-none">
+              {busy === "accept" ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Check size={15} aria-hidden="true" />} Accept
+            </button>
+            <button type="button" onClick={() => void run("decline", onReject)} disabled={busy !== null} className="btn-secondary flex-1 sm:flex-none">
+              {busy === "decline" ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <X size={15} aria-hidden="true" />} Decline
+            </button>
+          </div>
+        ) : status && (
+          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${status.tone}`}>
+            <status.icon size={12} aria-hidden="true" /> {status.label}
+          </span>
         )}
       </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-bold text-sm truncate">{displayName}</p>
-        <p className="text-xs text-foreground/45 truncate">{displayEmail}</p>
-      </div>
-
-      {/* Actions */}
-      {direction === "incoming" ? (
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleAccept}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent/90 transition-colors disabled:opacity-50"
-          >
-            <Check size={14} />
-            Accept
-          </button>
-          <button
-            onClick={handleReject}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-foreground/60 bg-border/40 hover:bg-border/60 transition-colors disabled:opacity-50"
-          >
-            <X size={14} />
-            Decline
-          </button>
-        </div>
-      ) : (
-        <div className="shrink-0">
-          {request.status === "pending" && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200">
-              <Clock size={12} />
-              Pending
-            </span>
-          )}
-          {request.status === "accepted" && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200">
-              <Check size={12} />
-              Accepted
-            </span>
-          )}
-          {request.status === "rejected" && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-red-500 bg-red-50 border border-red-200">
-              <X size={12} />
-              Declined
-            </span>
-          )}
-        </div>
-      )}
-    </motion.div>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+    </motion.li>
   );
 }

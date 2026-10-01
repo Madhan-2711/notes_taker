@@ -68,7 +68,7 @@ export function NoteComments({ noteId, userId, userName, privateKey }: { noteId:
     finally { setBusy(false); }
   }
 
-  return <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4">
+  return <details open className="rounded-2xl border border-slate-200 bg-white px-4">
     <summary className="flex min-h-12 cursor-pointer items-center gap-2 text-sm font-bold text-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-600"><MessageCircle size={17} /> Discussion <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{comments.length}</span></summary>
     {!privateKey ? <p className="mb-4 text-sm text-slate-700">Unlock your vault to read and write comments.</p> : <div className="pb-4">
       {comments.length === 0 && <p className="mb-3 text-sm text-slate-600">No comments yet. Start the conversation.</p>}

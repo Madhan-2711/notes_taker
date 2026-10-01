@@ -6,7 +6,8 @@ import { useCollabEditor } from "../hooks/useCollabEditor";
 import { usePresence } from "../hooks/usePresence";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { motion } from "framer-motion";
-import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save, Maximize2, Minimize2 } from "lucide-react";
+import { Loader2, Wifi, WifiOff, Share2, ArrowLeft, Save, Maximize2, Minimize2, PanelRight, X } from "lucide-react";
+import { Dialog, useDialogTitleId } from "./ui/Dialog";
 import Link from "next/link";
 import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
@@ -135,6 +136,8 @@ export function CollabNoteEditor({
   }, [images, canEdit, userId, editorScrollTop]);
 
   const [fullscreen, setFullscreen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsTitleId = useDialogTitleId();
 
   const exitFullscreen = useCallback(() => {
     setFullscreen(false);
@@ -206,66 +209,56 @@ export function CollabNoteEditor({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8">
-        <Loader2 size={28} className="text-emerald-500 animate-spin" />
-        <p className="text-sm text-foreground/50 font-medium">Loading collaborative note...</p>
+      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8" aria-busy="true" aria-label="Loading shared note">
+        <div className="mb-6 h-9 w-64 animate-pulse rounded-xl bg-slate-200" />
+        <div className="mb-3 h-12 animate-pulse rounded-2xl bg-slate-200" />
+        <div className="h-[60dvh] animate-pulse rounded-card border border-slate-200 bg-white" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
-        <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center">
-          <WifiOff size={28} className="text-red-500" />
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
+          <WifiOff size={26} className="text-red-700" aria-hidden="true" />
         </div>
-        <p className="text-lg font-semibold text-foreground/80">Connection Error</p>
-        <p className="text-sm text-foreground/45 max-w-sm text-center">{error}</p>
-        <Link
-          href="/notes"
-          className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
-        >
-          <ArrowLeft size={14} /> Back to notes
+        <p className="text-lg font-semibold text-slate-900">Couldn&apos;t open this shared note</p>
+        <p className="max-w-sm text-sm text-slate-600">{error}</p>
+        <Link href="/notes" className="btn-secondary">
+          <ArrowLeft size={15} aria-hidden="true" /> Back to notes
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-6"
-      >
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <Link
-            href="/notes"
-            className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-foreground transition-colors shrink-0"
-          >
-            <ArrowLeft size={16} />
-            <span className="hidden sm:inline">Notes</span>
+    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      {/* Header: the board follows directly; secondary tools live in the details sheet. */}
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <Link href="/notes" className="-ml-2 mb-1 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900">
+            <ArrowLeft size={16} aria-hidden="true" /> Notes
           </Link>
-          <div className="h-4 w-px bg-border shrink-0"></div>
-          <h1 className="text-lg sm:text-xl font-bold tracking-tight truncate">{title}</h1>
-          <PresenceIndicator users={activeUsers} />
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
+            <PresenceIndicator users={activeUsers} />
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Sync indicator */}
-          <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold ${
-            isSynced
-              ? "text-emerald-600 bg-emerald-50 border border-emerald-200"
-              : "text-amber-600 bg-amber-50 border border-amber-200"
+          <span role="status" className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold ${
+            isSynced ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-300 bg-amber-50 text-amber-900"
           }`}>
-            {isSynced ? <Wifi size={12} /> : <Loader2 size={12} className="animate-spin" />}
-            {isSynced ? "Synced" : "Syncing..."}
-          </div>
+            {isSynced ? <Wifi size={13} aria-hidden="true" /> : <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
+            {isSynced ? "Synced" : "Syncing…"}
+          </span>
 
           {/* Only the owner creates checkpoints and prunes represented updates. */}
           {canCompact && (
             <button
+              type="button"
               onClick={async () => {
                 setSaving(true);
                 setCheckpointError("");
@@ -274,46 +267,56 @@ export function CollabNoteEditor({
                 finally { setSaving(false); }
               }}
               disabled={saving}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-primary border-2 border-primary/30 hover:bg-primary/5 transition-colors disabled:opacity-50"
+              aria-label={saving ? "Saving checkpoint" : "Save checkpoint"}
+              className="btn-secondary px-3"
             >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              <span className="hidden sm:inline">{saving ? "Saving..." : "Checkpoint"}</span>
+              {saving ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
+              <span className="hidden lg:inline">{saving ? "Saving…" : "Checkpoint"}</span>
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={enterFullscreen}
-            aria-label="Full screen"
-            title="Full screen"
-            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-slate-700 border-2 border-slate-200 hover:bg-slate-50 transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600"
-          >
-            <Maximize2 size={14} />
-            <span className="hidden sm:inline">Full screen</span>
+          <button type="button" onClick={enterFullscreen} aria-label="Full screen" title="Full screen" className="btn-secondary px-3">
+            <Maximize2 size={15} aria-hidden="true" />
+            <span className="hidden lg:inline">Full screen</span>
+          </button>
+
+          <button type="button" onClick={() => setDetailsOpen(true)} aria-haspopup="dialog" className="btn-secondary px-3" aria-label="Comments and files">
+            <PanelRight size={15} aria-hidden="true" />
+            <span className="hidden sm:inline">Comments &amp; files</span>
           </button>
 
           {/* Share button */}
           {onShare && (
-            <button
-              onClick={onShare}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-emerald-600 border-2 border-emerald-200 hover:bg-emerald-50 transition-colors"
-            >
-              <Share2 size={14} />
-              <span className="hidden sm:inline">Share</span>
+            <button type="button" onClick={onShare} className="btn-primary">
+              <Share2 size={15} aria-hidden="true" />
+              Share
             </button>
           )}
         </div>
-      </motion.div>
-      {checkpointError && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{checkpointError}</p>}
+      </div>
+      {checkpointError && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{checkpointError}</p>}
 
-      <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4">
-        <summary className="cursor-pointer py-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-indigo-500">Files & export</summary>
-        <NoteExport title={title} content={plainText} delta={text ? collabExportDelta(text, images) : null} images={{ noteId, userId, privateKey }} encrypted />
-        {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} onInsertImage={canEdit ? insertImage : undefined} onInsertText={canEdit && text ? (spoken) => text.insert(text.length, `\n${spoken}`) : undefined} />}
-      </details>
-      <NoteComments noteId={noteId} userId={userId} userName={displayName} privateKey={privateKey} />
-      {canCompact && <CollabHistory noteId={noteId} userId={userId} privateKey={privateKey} />}
-      <div className="mb-4"><NoteOrganizer noteId={noteId} /></div>
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} labelledBy={detailsTitleId} size="lg" sheetOnMobile>
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-3 sm:px-6">
+          <h2 id={detailsTitleId} className="text-lg font-bold tracking-tight">Comments and files</h2>
+          <button type="button" onClick={() => setDetailsOpen(false)} className="icon-btn -mr-2" aria-label="Close">
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-6">
+          <NoteComments noteId={noteId} userId={userId} userName={displayName} privateKey={privateKey} />
+          <section aria-labelledby="collab-organise">
+            <h3 id="collab-organise" className="mb-3 text-base font-bold">Organise</h3>
+            <NoteOrganizer noteId={noteId} />
+          </section>
+          {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} onInsertImage={canEdit ? (file) => { insertImage(file); setDetailsOpen(false); } : undefined} onInsertText={canEdit && text ? (spoken) => text.insert(text.length, `\n${spoken}`) : undefined} />}
+          <section aria-labelledby="collab-export">
+            <h3 id="collab-export" className="mb-3 text-base font-bold">Export</h3>
+            <NoteExport title={title} content={plainText} delta={text ? collabExportDelta(text, images) : null} images={{ noteId, userId, privateKey }} encrypted />
+          </section>
+          {canCompact && <CollabHistory noteId={noteId} userId={userId} privateKey={privateKey} />}
+        </div>
+      </Dialog>
 
       <div
         className={fullscreen ? "fixed inset-0 z-[60] overflow-y-auto px-3 py-3 sm:px-6" : ""}

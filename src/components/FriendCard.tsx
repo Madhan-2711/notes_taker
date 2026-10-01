@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { type UserProfile } from "../lib/validations";
-import { Trash2 } from "lucide-react";
-import Image from "next/image";
+import { UserMinus } from "lucide-react";
+import { Avatar } from "./Avatar";
+import { Menu } from "./ui/Menu";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 interface FriendCardProps {
   friend: UserProfile & { friendDocId: string };
@@ -12,73 +14,36 @@ interface FriendCardProps {
 }
 
 export function FriendCard({ friend, onRemove }: FriendCardProps) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [removing, setRemoving] = useState(false);
-
-  const handleRemove = async () => {
-    if (confirmDelete) {
-      setRemoving(true);
-      try {
-        await onRemove(friend.friendDocId);
-      } finally {
-        setRemoving(false);
-        setConfirmDelete(false);
-      }
-    } else {
-      setConfirmDelete(true);
-      setTimeout(() => setConfirmDelete(false), 3000);
-    }
-  };
+  const reduceMotion = useReducedMotion();
+  const [confirming, setConfirming] = useState(false);
+  const name = friend.displayName || "Friend";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
+    <motion.li
+      layout={!reduceMotion}
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="glass neubrutal rounded-card p-5 flex items-center gap-4 group"
+      exit={{ opacity: 0 }}
+      className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 pl-4"
     >
-      {/* Avatar */}
-      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
-        {friend.photoURL ? (
-          <Image
-            src={friend.photoURL}
-            alt={friend.displayName}
-            width={48}
-            height={48}
-            className="w-full h-full object-cover rounded-full"
-          />
-        ) : (
-          friend.displayName?.charAt(0)?.toUpperCase() || "?"
-        )}
+      <Avatar name={name} photoURL={friend.photoURL} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold text-slate-900">{name}</p>
+        {friend.email && <p className="truncate text-sm text-slate-600">{friend.email}</p>}
       </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-bold text-sm truncate">{friend.displayName}</p>
-        {friend.email && (
-          <p className="text-xs text-foreground/45 truncate">{friend.email}</p>
-        )}
-      </div>
-
-      {/* Remove */}
-      <button
-        onClick={handleRemove}
-        disabled={removing}
-        className={`shrink-0 p-2 rounded-xl transition-all sm:opacity-0 sm:group-hover:opacity-100 ${
-          confirmDelete
-            ? "text-white bg-red-500 hover:bg-red-600"
-            : "text-foreground/40 hover:text-red-500 hover:bg-red-50"
-        }`}
-        aria-label={confirmDelete ? "Confirm remove" : "Remove friend"}
-      >
-        <Trash2 size={16} />
-      </button>
-
-      {confirmDelete && (
-        <span className="absolute -bottom-6 left-0 text-xs text-red-500 font-medium animate-pulse">
-          Tap again to remove
-        </span>
-      )}
-    </motion.div>
+      <Menu
+        label={`More actions for ${name}`}
+        items={[{ label: "Remove friend", icon: UserMinus, destructive: true, onSelect: () => setConfirming(true) }]}
+      />
+      <ConfirmDialog
+        open={confirming}
+        title={`Remove ${name}?`}
+        description="You'll stop seeing each other in your friends lists. Shared notes stay shared until you change who has access."
+        confirmLabel="Remove friend"
+        destructive
+        onConfirm={async () => { await onRemove(friend.friendDocId); setConfirming(false); }}
+        onCancel={() => setConfirming(false)}
+      />
+    </motion.li>
   );
 }

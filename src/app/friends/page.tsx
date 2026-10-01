@@ -1,54 +1,47 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AnimatePresence } from "framer-motion";
+import { Send, UserPlus, Users, LockKeyhole, ChevronDown, Loader2 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
+import { useMyUsername } from "../../hooks/useMyUsername";
+import { useInbox } from "../../contexts/InboxContext";
+import { useToast } from "../../contexts/ToastContext";
 import { hasValidConfig } from "../../lib/firebaseConfig";
-import { type FriendRequest, type UserProfile, type CollabInvite } from "../../lib/validations";
+import { type FriendRequest, type UserProfile } from "../../lib/validations";
 import {
   sendFriendRequest,
-  subscribeToPendingRequests,
   getSentRequests,
   acceptRequest,
   rejectRequest,
   getFriends,
   removeFriend,
 } from "../../lib/services/social/friendsService";
-import {
-  subscribeToInvites,
-  acceptInvite,
-  rejectInvite,
-} from "../../lib/services/social/collaborationService";
+import { acceptInvite, rejectInvite } from "../../lib/services/social/collaborationService";
 import { FriendRequestCard } from "../../components/FriendRequestCard";
 import { FriendCard } from "../../components/FriendCard";
 import { CollabInviteCard } from "../../components/CollabInviteCard";
-import { KeyBackupRestore } from "../../components/KeyBackupRestore";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock, CloudUpload, AtSign } from "lucide-react";
-import { useMyUsername } from "../../hooks/useMyUsername";
-import { UsernameForm } from "../../components/UsernameForm";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { PageHeader } from "../../components/PageHeader";
+import { EmptyState, PageLoading, SignInRequired } from "../../components/PageState";
 
 export default function FriendsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const {
-    privateKey,
-    needsVaultSetup,
-  } = useUserKeys();
+  const toast = useToast();
+  const { privateKey, needsVaultSetup, openVaultSetup } = useUserKeys();
+  const { invites: collabInvites, friendRequests: incomingRequests } = useInbox();
+  const myUsername = useMyUsername(user?.uid);
 
   const [searchEmail, setSearchEmail] = useState("");
-  const myUsername = useMyUsername(user?.uid);
-  const [editingUsername, setEditingUsername] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchSuccess, setSearchSuccess] = useState(false);
   const [sending, setSending] = useState(false);
-  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
-  const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[]>([]);
-  const [collabInvites, setCollabInvites] = useState<CollabInvite[]>([]);
-  const [showKeyExport, setShowKeyExport] = useState(false);
+  const [friends, setFriends] = useState<(UserProfile & { friendDocId: string })[] | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -58,20 +51,6 @@ export default function FriendsPage() {
     ]);
     setSentRequests(sent);
     setFriends(friendsList);
-  }, [user]);
-
-  // Subscribe to incoming pending friend requests
-  useEffect(() => {
-    if (!user || !hasValidConfig) return;
-    const unsub = subscribeToPendingRequests(user.uid, setIncomingRequests);
-    return () => unsub();
-  }, [user]);
-
-  // Subscribe to incoming collab invites
-  useEffect(() => {
-    if (!user || !hasValidConfig) return;
-    const unsub = subscribeToInvites(user.uid, setCollabInvites);
-    return () => unsub();
   }, [user]);
 
   // Fetch sent requests and friends (re-fetch on user change)
@@ -84,7 +63,9 @@ export default function FriendsPage() {
         setSentRequests(sent);
         setFriends(friendsList);
       }
-    );
+    ).catch(() => {
+      if (!cancelled) { setLoadError("Could not load your friends. Check your connection and refresh."); setFriends([]); }
+    });
     return () => {
       cancelled = true;
     };
@@ -119,12 +100,14 @@ export default function FriendsPage() {
     }
   };
 
+  // Errors propagate to the card, which shows them inline.
   const handleAccept = async (requestId: string) => {
     if (!user) return;
     const request = incomingRequests.find((r) => r.id === requestId);
     if (!request) return;
     await acceptRequest(requestId, request.senderId, user.uid);
     await loadData();
+    toast({ message: `You and ${request.senderName || "your new friend"} are now friends` });
   };
 
   const handleReject = async (requestId: string) => {
@@ -133,326 +116,159 @@ export default function FriendsPage() {
 
   const handleRemoveFriend = async (friendDocId: string) => {
     await removeFriend(friendDocId);
-    setFriends((prev) => prev.filter((f) => f.friendDocId !== friendDocId));
+    setFriends((prev) => (prev ?? []).filter((f) => f.friendDocId !== friendDocId));
+    toast({ message: "Friend removed" });
   };
 
   const handleAcceptInvite = async (inviteId: string) => {
-    if (!user || !privateKey) return;
-    try {
-      await acceptInvite(inviteId, user.uid, privateKey);
-      // Find the invite to get noteId for navigation
-      const invite = collabInvites.find((i) => i.id === inviteId);
-      if (invite) {
-        router.push(`/collab/${invite.noteId}`);
-      }
-    } catch (err) {
-      console.error("Accept invite error:", err);
+    if (!user) return;
+    if (!privateKey) throw new Error("Unlock your vault to accept this invitation.");
+    await acceptInvite(inviteId, user.uid, privateKey);
+    // Find the invite to get noteId for navigation
+    const invite = collabInvites.find((i) => i.id === inviteId);
+    if (invite) {
+      router.push(`/collab/${invite.noteId}`);
     }
   };
 
   const handleRejectInvite = async (inviteId: string) => {
-    try {
-      await rejectInvite(inviteId);
-    } catch (err) {
-      console.error("Reject invite error:", err);
-    }
+    await rejectInvite(inviteId);
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading cards={2} label="Loading friends" />;
+  if (!user) return <SignInRequired>Sign in to manage friends.</SignInRequired>;
 
-  if (!user) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto gap-4">
-        <p className="text-foreground/60 text-lg">Please sign in to manage friends.</p>
-      </div>
-    );
-  }
+  const waiting = collabInvites.length + incomingRequests.length;
+  const pendingSent = sentRequests.filter((request) => request.status === "pending").length;
 
   return (
-    <div className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-4 mb-8"
-      >
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={16} />
-          Home
-        </Link>
-        <div className="h-4 w-px bg-border"></div>
-        <h1 className="text-2xl font-bold tracking-tight">Friends</h1>
-      </motion.div>
+    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <PageHeader
+        title="Friends"
+        subtitle={myUsername
+          ? <>Friends can add you as <strong className="font-semibold text-slate-900">@{myUsername}</strong>. <Link href="/settings" className="font-semibold text-indigo-800 underline-offset-2 hover:underline">Change</Link></>
+          : myUsername === null
+            ? <><Link href="/settings" className="font-semibold text-indigo-800 underline-offset-2 hover:underline">Pick a username</Link> so friends can find you without your email.</>
+            : undefined}
+      />
 
-      {/* Vault Setup Banner — always visible when vault backup is missing */}
-      {needsVaultSetup && (
-        <motion.div
-          initial={{ opacity: 0, y: -5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-800"
-        >
-          <div className="flex items-center gap-2.5">
-            <Lock size={16} className="shrink-0" />
-            <span className="text-sm font-semibold">
-              Back up your encryption keys to the cloud so you can access them on other devices.
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setShowKeyExport(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
-            >
-              <CloudUpload size={13} />
-              Backup / Restore
-            </button>
-          </div>
-        </motion.div>
-      )}
-
-      {!needsVaultSetup && privateKey && (
-        <motion.div
-          initial={{ opacity: 0, y: -5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex justify-end mb-4"
-        >
-          <button
-            onClick={() => setShowKeyExport(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-border/50 text-xs font-bold text-foreground/50 hover:text-foreground hover:border-foreground/30 transition-colors"
-          >
-            <CloudUpload size={13} />
-            Backup / Restore Keys
-          </button>
-        </motion.div>
-      )}
-
-      {/* Your username */}
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass neubrutal rounded-card p-6 mb-6"
-        aria-label="Your username"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <AtSign size={16} className="text-primary" />
-            <h2 className="text-sm font-bold tracking-tight">Your username</h2>
-          </div>
-          {myUsername && !editingUsername && (
-            <div className="flex items-center gap-3">
-              <span className="text-base font-bold text-slate-900">@{myUsername}</span>
-              <button type="button" onClick={() => setEditingUsername(true)} className="min-h-11 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-600">Change</button>
-            </div>
-          )}
-        </div>
-        {myUsername === null && <p className="mt-2 text-sm text-slate-600">Pick a username so friends can find you without your email.</p>}
-        {user && (myUsername === null || editingUsername) && (
-          <div className="mt-4">
-            <UsernameForm userId={user.uid} initial={myUsername ?? ""} onSaved={() => setEditingUsername(false)} />
-            {editingUsername && <button type="button" onClick={() => setEditingUsername(false)} className="mt-2 min-h-11 text-sm font-semibold text-slate-600 hover:text-slate-900">Cancel</button>}
-          </div>
+      <div className="space-y-6">
+        {/* Things that need a decision come first. */}
+        {waiting > 0 && (
+          <section aria-labelledby="waiting-heading" className="card p-5 sm:p-6">
+            <h2 id="waiting-heading" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+              Waiting for you <span className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-bold text-white">{waiting}</span>
+            </h2>
+            {collabInvites.length > 0 && !privateKey && (
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+                <span className="flex items-start gap-2">
+                  <LockKeyhole size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  {needsVaultSetup ? "Set up a vault password before accepting shared notes." : "Unlock your vault to accept shared notes."}
+                </span>
+                {needsVaultSetup && <button type="button" onClick={openVaultSetup} className="btn-secondary shrink-0">Set up vault</button>}
+              </div>
+            )}
+            <ul className="mt-4 divide-y divide-slate-200">
+              <AnimatePresence initial={false}>
+                {collabInvites.map((invite) => (
+                  <CollabInviteCard
+                    key={invite.id}
+                    invite={invite}
+                    canAccept={Boolean(privateKey)}
+                    onAccept={handleAcceptInvite}
+                    onReject={handleRejectInvite}
+                  />
+                ))}
+                {incomingRequests.map((req) => (
+                  <FriendRequestCard
+                    key={req.id}
+                    request={req}
+                    direction="incoming"
+                    onAccept={handleAccept}
+                    onReject={handleReject}
+                  />
+                ))}
+              </AnimatePresence>
+            </ul>
+          </section>
         )}
-      </motion.section>
 
-      {/* Search / Send Request */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className="glass neubrutal rounded-card p-6 mb-8"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <UserPlus size={16} className="text-primary" />
-          <h2 className="text-sm font-bold tracking-tight">Add a Friend</h2>
-        </div>
-
-        <form onSubmit={handleSendRequest} className="flex gap-3">
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40" />
+        <section aria-labelledby="add-friend-heading" className="panel p-5 sm:p-6">
+          <h2 id="add-friend-heading" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+            <UserPlus size={18} aria-hidden="true" /> Add a friend
+          </h2>
+          <form onSubmit={handleSendRequest} className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <label htmlFor="friend-search" className="sr-only">Friend&apos;s username or email address</label>
             <input
+              id="friend-search"
               type="text"
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              placeholder="Friend's username or email address..."
-              aria-label="Friend's username or email address"
+              placeholder="Username or email address"
               autoCapitalize="none"
+              autoComplete="off"
               spellCheck={false}
-              className="w-full pl-9 pr-4 py-2.5 text-sm bg-transparent border border-border/60 rounded-xl focus:outline-none focus:border-primary transition-colors placeholder:text-foreground/30"
+              aria-invalid={Boolean(searchError) || undefined}
+              aria-describedby={searchError ? "friend-search-error" : undefined}
+              className="field sm:flex-1"
             />
+            <button type="submit" disabled={!searchEmail.trim() || sending} className="btn-primary shrink-0">
+              {sending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Send size={15} aria-hidden="true" />}
+              {sending ? "Sending…" : "Send request"}
+            </button>
+          </form>
+          <div aria-live="polite">
+            {searchError && <p id="friend-search-error" className="mt-2 text-sm font-medium text-red-700">{searchError}</p>}
+            {searchSuccess && <p className="mt-2 text-sm font-medium text-emerald-800">Friend request sent.</p>}
           </div>
-          <button
-            type="submit"
-            disabled={!searchEmail.trim() || sending}
-            className="bg-primary text-primary-foreground neubrutal px-5 py-2.5 rounded-xl font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex items-center gap-2 shrink-0"
-          >
-            <Send size={14} />
-            {sending ? "Sending..." : "Send"}
-          </button>
-        </form>
+        </section>
 
-        {searchError && (
-          <p className="text-sm text-red-500 font-medium mt-3">{searchError}</p>
-        )}
-        {searchSuccess && (
-          <motion.p
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-sm text-accent font-medium mt-3"
-          >
-            ✓ Friend request sent!
-          </motion.p>
-        )}
-      </motion.div>
-
-      {/* Collab Invites */}
-      {collabInvites.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.07 }}
-          className="mb-10"
-        >
-          <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-4 flex items-center gap-3">
-            <Lock size={13} />
-            <span>Collaboration Invites</span>
-            <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-              {collabInvites.length}
-            </span>
-            <span className="flex-1 h-px bg-border/50"></span>
-          </h3>
-          {!privateKey && (
-            <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <span>
-                {needsVaultSetup
-                  ? "⚠️ You need to set up a vault password before you can accept encrypted note invites."
-                  : "⚠️ Unlock your vault password to accept encrypted invites."}
-              </span>
+        <section aria-labelledby="friends-heading">
+          <h2 id="friends-heading" className="mb-3 flex items-center gap-2 text-lg font-bold tracking-tight">
+            <Users size={18} aria-hidden="true" /> Your friends
+            {friends && friends.length > 0 && <span className="text-sm font-semibold tabular-nums text-slate-600">{friends.length}</span>}
+          </h2>
+          {loadError && <p role="alert" className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{loadError}</p>}
+          {friends === null ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-busy="true" aria-label="Loading friends">
+              {[0, 1].map((index) => <div key={index} className="h-[70px] animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
             </div>
+          ) : friends.length > 0 ? (
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <AnimatePresence initial={false}>
+                {friends.map((friend) => (
+                  <FriendCard
+                    key={friend.uid}
+                    friend={friend}
+                    onRemove={handleRemoveFriend}
+                  />
+                ))}
+              </AnimatePresence>
+            </ul>
+          ) : (
+            <EmptyState
+              icon={<Users size={22} />}
+              title="No friends yet"
+              description="Send a request with a username or email to start sharing notes."
+              action={<button type="button" onClick={() => document.getElementById("friend-search")?.focus()} className="btn-secondary">Add a friend</button>}
+            />
           )}
-          <div className="space-y-3">
-            <AnimatePresence>
-              {collabInvites.map((invite) => (
-                <CollabInviteCard
-                  key={invite.id}
-                  invite={invite}
-                  onAccept={handleAcceptInvite}
-                  onReject={handleRejectInvite}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        </motion.section>
-      )}
+        </section>
 
-      {/* Incoming Requests */}
-      {incomingRequests.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-10"
-        >
-          <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-4 flex items-center gap-3">
-            <Inbox size={13} />
-            <span>Incoming Requests</span>
-            <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-              {incomingRequests.length}
-            </span>
-            <span className="flex-1 h-px bg-border/50"></span>
-          </h3>
-          <div className="space-y-3">
-            <AnimatePresence>
-              {incomingRequests.map((req) => (
-                <FriendRequestCard
-                  key={req.id}
-                  request={req}
-                  direction="incoming"
-                  onAccept={handleAccept}
-                  onReject={handleReject}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        </motion.section>
-      )}
-
-      {/* Sent Requests */}
-      {sentRequests.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="mb-10"
-        >
-          <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-4 flex items-center gap-3">
-            <Send size={13} />
-            <span>Sent Requests</span>
-            <span className="text-foreground/25">{sentRequests.length}</span>
-            <span className="flex-1 h-px bg-border/50"></span>
-          </h3>
-          <div className="space-y-3">
-            <AnimatePresence>
+        {sentRequests.length > 0 && (
+          <details className="panel group px-5 sm:px-6">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2"><Send size={16} aria-hidden="true" /> Sent requests <span className="text-sm tabular-nums text-slate-600">{pendingSent > 0 ? `${pendingSent} pending` : sentRequests.length}</span></span>
+              <ChevronDown size={18} className="text-slate-600 transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <ul className="divide-y divide-slate-200 border-t border-slate-200 py-4">
               {sentRequests.map((req) => (
-                <FriendRequestCard
-                  key={req.id}
-                  request={req}
-                  direction="outgoing"
-                />
+                <FriendRequestCard key={req.id} request={req} direction="outgoing" />
               ))}
-            </AnimatePresence>
-          </div>
-        </motion.section>
-      )}
-
-      {/* Friends List */}
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-4 flex items-center gap-3">
-          <Users size={13} />
-          <span>Your Friends</span>
-          <span className="text-foreground/25">{friends.length}</span>
-          <span className="flex-1 h-px bg-border/50"></span>
-        </h3>
-
-        {friends.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <AnimatePresence>
-              {friends.map((friend) => (
-                <FriendCard
-                  key={friend.uid}
-                  friend={friend}
-                  onRemove={handleRemoveFriend}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        ) : (
-          <div className="py-16 text-center text-foreground/40 font-medium flex flex-col items-center gap-4">
-            <div className="w-16 h-16 border-2 border-dashed border-border rounded-full flex items-center justify-center">👥</div>
-            <p>No friends yet. Send a request to get started!</p>
-          </div>
+            </ul>
+          </details>
         )}
-      </motion.section>
-
-      {/* Key Backup/Restore Modal */}
-      <KeyBackupRestore
-        isOpen={showKeyExport}
-        onClose={() => setShowKeyExport(false)}
-        privateKey={privateKey}
-        userId={user.uid}
-        onRestoreSuccess={() => {}}
-      />
+      </div>
     </div>
   );
 }

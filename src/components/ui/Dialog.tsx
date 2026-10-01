@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 interface DialogProps {
@@ -71,11 +72,16 @@ export function Dialog({ open, onClose, labelledBy, label, children, size = "md"
     };
   }, [open]);
 
+  // Portalled to <body> so a transformed ancestor (animated cards) can't trap the fixed overlay.
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
+
   const shape = sheetOnMobile
     ? "h-dvh max-h-dvh rounded-none sm:h-auto sm:max-h-[90dvh] sm:rounded-card"
     : "max-h-[90dvh] rounded-card";
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -105,7 +111,8 @@ export function Dialog({ open, onClose, labelledBy, label, children, size = "md"
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 

@@ -37,7 +37,7 @@ export function CollabHistory({ noteId, userId, privateKey }: { noteId: string; 
     finally { setBusy(false); }
   }
 
-  return <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4" onToggle={(event) => { if (event.currentTarget.open) void load(); }}>
+  return <details className="rounded-2xl border border-slate-200 bg-white px-4" onToggle={(event) => { if (event.currentTarget.open) void load(); }}>
     <summary className="flex min-h-12 cursor-pointer items-center gap-2 text-sm font-bold text-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-600"><History size={17} /> Checkpoint history</summary>
     <div className="pb-4">
       {busy && <p role="status" className="text-sm text-slate-600">Loading checkpoint…</p>}

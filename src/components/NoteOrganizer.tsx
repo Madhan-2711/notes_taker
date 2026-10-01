@@ -139,10 +139,7 @@ export function NoteOrganizer({ noteId }: { noteId: string }) {
         <h3 className="label">Tags</h3>
         <NoteTagEditor noteId={noteId} />
       </div>
-      <div>
-        <h3 className="label">Reminder</h3>
-        <NoteReminderControl noteId={noteId} />
-      </div>
+      <NoteReminderControl noteId={noteId} />
       <div>
         <button type="button" disabled={busy} onClick={() => void run(toggle)} className="btn-secondary">
           {archived ? <ArchiveRestore size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
