@@ -20,8 +20,12 @@ import { getFriends } from "../../lib/services/social/friendsService";
 import { sendCollabInvite } from "../../lib/services/social/collaborationService";
 import type { UserProfile } from "../../lib/validations";
 import { NoteModePicker } from "../../components/NoteModePicker";
-import { motion } from "framer-motion";
-import { ArrowLeft, Check, FolderOpen, ImagePlus, Paperclip, Trash2, Users } from "lucide-react";
+import { noteModeInfo } from "../../lib/noteModes";
+import { Check, FileText, FolderOpen, ImagePlus, LoaderCircle, Paperclip, Trash2, Users, LockKeyhole } from "lucide-react";
+import { PageHeader } from "../../components/PageHeader";
+import { PageLoading, SignInRequired } from "../../components/PageState";
+import { Menu } from "../../components/ui/Menu";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -43,8 +47,13 @@ export default function WritePage() {
   const [editorVersion, setEditorVersion] = useState(0);
   const draftDelta = parseRichContent(rich) ?? deltaFromPlain(content);
 
+  const [pendingTemplate, setPendingTemplate] = useState<NoteTemplate | null>(null);
+  const chooseTemplate = (template: NoteTemplate) => {
+    if (content.trim()) setPendingTemplate(template);
+    else applyTemplate(template);
+  };
   const applyTemplate = (template: NoteTemplate) => {
-    if (content.trim() && !window.confirm(`Replace what you've written with the "${template.label}" template?`)) return;
+    setPendingTemplate(null);
     updateDraft({
       title: title.trim() ? title : template.title,
       content: plainFromDelta(template.delta),
@@ -210,214 +219,152 @@ export default function WritePage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading cards={1} label="Loading editor" />;
+  if (!user) return <SignInRequired>Sign in to write notes.</SignInRequired>;
 
-  if (!user) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto gap-4">
-        <p className="text-foreground/60 text-lg">Please sign in to write notes.</p>
-      </div>
-    );
-  }
+  const locked = saving || Boolean(savedNoteId);
+  const groupChip = (selected: boolean) =>
+    `chip ${selected ? "border-indigo-700 bg-indigo-50 text-indigo-900" : "border-slate-300 bg-white text-slate-800 hover:border-indigo-500"}`;
 
   return (
-    <div className="flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-4 mb-8"
-      >
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={16} />
-          Home
-        </Link>
-        <div className="h-4 w-px bg-border"></div>
-        <h1 className="text-2xl font-bold tracking-tight">Write a Note</h1>
-      </motion.div>
+    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <PageHeader title="New note" />
 
-      {/* Write Form */}
-      <motion.form
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        onSubmit={handleCreateNote}
-        className="glass neubrutal rounded-card p-4 sm:p-8 flex flex-col gap-5"
-      >
-        {/* Mode Picker */}
-        <div className={saving || savedNoteId ? "pointer-events-none opacity-60" : ""}>
-          <NoteModePicker value={noteMode} onChange={setNoteMode} />
-        </div>
-
-        {/* Key status warning for secure mode */}
-        {noteMode === "secure" && !hasKeys && keysReady && (
-          <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-xl">
-            ⚠️ Encryption keys are being set up. Please wait a moment...
-          </div>
-        )}
-
-        {/* Divider between mode picker and form */}
-        <div className="h-px bg-border/40" />
-
-        <div>
-          <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
-            Title
-          </label>
+      <form onSubmit={handleCreateNote} className="flex flex-col gap-5">
+        <div className="card p-4 sm:p-7">
+          <label htmlFor="write-title" className="sr-only">Title</label>
           <input
+            id="write-title"
             type="text"
-            placeholder="Give your note a title..."
+            placeholder="Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={Boolean(savedNoteId)}
-            className="w-full bg-transparent text-xl font-bold placeholder:text-foreground/25 focus:outline-none border-b border-border/50 pb-3 focus:border-primary transition-colors"
+            autoFocus={!title}
+            className="w-full border-b border-slate-200 bg-transparent pb-3 text-2xl font-bold transition-colors placeholder:text-slate-500 focus:border-primary-strong focus:outline-none"
             maxLength={100}
           />
-        </div>
 
-        <section aria-label="Templates" className={saving || savedNoteId ? "pointer-events-none opacity-60" : ""}>
-          <h2 className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2">Start from a template</h2>
-          <div className="flex flex-wrap gap-2">
-            {NOTE_TEMPLATES.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => applyTemplate(template)}
-                title={template.description}
-                className="min-h-11 rounded-xl border border-border/70 bg-white px-3 text-sm font-semibold text-slate-700 transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-600"
-              >
-                {template.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <div className="[--rich-toolbar-top:4rem] sm:[--rich-toolbar-top:5rem]">
-          <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
-            Content
-          </label>
-          <RichNoteEditor
-            key={`${user.uid}:${editorVersion}`}
-            initial={draftDelta}
-            readOnly={Boolean(savedNoteId)}
-            label="Note content"
-            placeholder="Start writing your thoughts..."
-            onChange={(delta, plain) => updateDraft({ rich: serializeDelta(delta), content: plain })}
-          />
-          <p className={`mt-1 text-right text-xs ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-600" : "text-foreground/40"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>
-        </div>
-
-        <section className="rounded-2xl border border-border/70 bg-white/70 p-4 sm:p-5" aria-label="Files and images">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-sm font-bold"><Paperclip size={17} /> Files & images <span className="font-normal text-foreground/45">(optional)</span></h2>
-              <p className="mt-1 text-xs leading-5 text-foreground/55">{noteMode === "normal" ? "Normal-note files are not encrypted." : "Files are encrypted before saving."} Images are optimized; other files must be under ~650 KB.</p>
+          <div className="mt-5 [--rich-toolbar-top:4rem]">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-800" id="write-content-label">Content</p>
+              <Menu
+                label="Use a template"
+                align="end"
+                triggerClassName={`btn-quiet min-h-10 px-3 ${locked ? "pointer-events-none opacity-50" : ""}`}
+                trigger={<><FileText size={16} aria-hidden="true" /> Use template</>}
+                items={NOTE_TEMPLATES.map((template) => ({ label: template.label, onSelect: () => chooseTemplate(template) }))}
+              />
             </div>
+            <RichNoteEditor
+              key={`${user.uid}:${editorVersion}`}
+              initial={draftDelta}
+              readOnly={Boolean(savedNoteId)}
+              label="Note content"
+              placeholder="Start writing your thoughts…"
+              onChange={(delta, plain) => updateDraft({ rich: serializeDelta(delta), content: plain })}
+            />
+            <p className={`mt-1 text-right text-xs tabular-nums ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-700" : "text-slate-600"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>
           </div>
-          <input ref={pickerRef} type="file" accept={ATTACHMENT_ACCEPT} multiple className="sr-only" aria-label="Choose images or files" onChange={(event) => addFiles(event.target.files)} />
-          <button type="button" disabled={saving || Boolean(savedNoteId)} onClick={() => pickerRef.current?.click()}
-            className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50">
-            <ImagePlus size={17} /> Add image or file
-          </button>
-          {files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Files to attach">{files.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-sm">
-            <Paperclip size={15} className="shrink-0 text-foreground/50" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 text-xs text-foreground/45">{Math.ceil(file.size / 1024)} KB</span>
-            <button type="button" disabled={saving || Boolean(savedNoteId)} onClick={() => setFiles((previous) => previous.filter((_, position) => position !== index))} className="rounded-lg p-2 text-foreground/55 hover:bg-red-50 hover:text-red-600 disabled:opacity-40" aria-label={`Remove ${file.name}`}><Trash2 size={15} /></button>
-          </li>)}</ul>}
-          <p className="mt-2 text-xs text-foreground/45">Files are added when you save the note. Up to 8 while creating; add more in the note editor.</p>
-        </section>
+        </div>
 
-        {noteMode === "collab" && <section className="rounded-2xl border border-border/70 bg-white/70 p-4 sm:p-5" aria-label="Invite collaborators">
-          <h2 className="flex items-center gap-2 text-sm font-bold"><Users size={17} /> Invite collaborators <span className="font-normal text-foreground/45">(optional)</span></h2>
-          <p className="mt-1 text-xs leading-5 text-foreground/55">Choose friends to invite when this note is saved. They can join after accepting.</p>
-          {friendsError && <p role="alert" className="mt-3 text-sm text-red-600">{friendsError}</p>}
-          {friendsLoading && <p className="mt-3 text-sm text-foreground/60">Loading friends…</p>}
-          {!friendsLoading && !friendsError && friends.length === 0 && <p className="mt-3 text-sm text-foreground/60">No friends to invite yet. <Link href="/friends" className="font-semibold text-primary underline">Find friends</Link>, or invite them later from the note.</p>}
-          {friends.length > 0 && <>
-            <div className="mt-3 flex flex-wrap gap-2">{friends.map((friend) => {
-              const selected = selectedFriends.includes(friend.uid);
-              return <button key={friend.uid} type="button" aria-pressed={selected} disabled={saving || Boolean(savedNoteId)} onClick={() => setSelectedFriends((previous) => selected ? previous.filter((id) => id !== friend.uid) : [...previous, friend.uid])}
-                className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${selected ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-border/70 bg-white hover:border-emerald-300"}`}>
-                {selected ? "✓ " : "+ "}{friend.displayName || "Friend"}
-              </button>;
-            })}</div>
-            {selectedFriends.length > 0 && <label className="mt-4 flex items-center gap-2 text-sm font-medium">Access
-              <select value={permission} disabled={saving || Boolean(savedNoteId)} onChange={(event) => setPermission(event.target.value as "editor" | "viewer")} className="min-h-11 rounded-xl border border-border/70 bg-white px-3">
-                <option value="editor">Can edit</option><option value="viewer">Can view</option>
-              </select>
-            </label>}
-          </>}
-        </section>}
+        <section className="panel flex flex-col gap-6 p-4 sm:p-6" aria-labelledby="write-options">
+          <h2 id="write-options" className="text-base font-bold tracking-tight">Options</h2>
 
-        {/* Group assignment */}
-        {groups.length > 0 && (
           <div>
-            <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-3 flex items-center gap-1.5">
-              <FolderOpen size={11} />
-              Add to Groups <span className="normal-case text-foreground/25">(optional)</span>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {groups.map((g) => {
-                const isSelected = selectedGroupIds.includes(g.id);
-                return (
-                  <button
-                    key={g.id}
-                    type="button"
-                    disabled={saving || Boolean(savedNoteId)}
-                    onClick={() => handleToggleGroup(g.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all duration-150 ${
-                      isSelected
-                        ? "text-white border-transparent shadow-sm"
-                        : "bg-transparent border-border/50 text-foreground/50 hover:border-primary/40"
-                    }`}
-                    style={isSelected ? { backgroundColor: g.color, borderColor: g.color } : {}}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: isSelected ? "white" : g.color }}
-                    />
-                    {g.title}
-                  </button>
-                );
-              })}
-            </div>
+            <p className="label" id="write-type-label">Type</p>
+            <NoteModePicker value={noteMode} onChange={setNoteMode} disabled={locked} />
+            {noteMode !== "normal" && !hasKeys && keysReady && (
+              <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                <LockKeyhole size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                Your encryption keys are still being set up. Please wait a moment.
+              </p>
+            )}
           </div>
-        )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-2 pt-4 border-t border-border/30">
-          <div className="flex-1">
-            {(error || keyError) && (
-              <span className="text-sm text-red-500 font-medium">{error || keyError}</span>
-            )}
-            {success && (
-              <motion.span
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="text-sm text-accent font-medium flex items-center gap-2"
-              >
-                <Check size={16} /> Note saved successfully!
-              </motion.span>
-            )}
-            {saving && <span role="status" className="text-sm font-medium text-primary">{saveStage || "Saving…"}</span>}
-            {savedNoteId && error && <Link href={noteMode === "collab" ? `/collab/${savedNoteId}` : `/notes?open=${savedNoteId}`} className="mt-1 block text-xs font-semibold text-primary underline">Open saved note</Link>}
+          {groups.length > 0 && (
+            <fieldset disabled={locked}>
+              <legend className="label flex items-center gap-1.5"><FolderOpen size={14} aria-hidden="true" /> Groups <span className="font-normal text-slate-600">(optional)</span></legend>
+              <div className="flex flex-wrap gap-2">
+                {groups.map((g) => {
+                  const isSelected = selectedGroupIds.includes(g.id);
+                  return (
+                    <button key={g.id} type="button" aria-pressed={isSelected} onClick={() => handleToggleGroup(g.id)} className={`${groupChip(isSelected)} disabled:opacity-50`}>
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} aria-hidden="true" />
+                      {g.title}
+                      {isSelected && <Check size={13} aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+
+          <div aria-labelledby="write-files">
+            <h3 id="write-files" className="label flex items-center gap-1.5"><Paperclip size={14} aria-hidden="true" /> Files and images <span className="font-normal text-slate-600">(optional)</span></h3>
+            <p className="text-sm text-slate-600">{noteMode === "normal" ? "Files on regular notes are not encrypted." : "Files are encrypted before saving."} Images are optimized; other files must be under about 650 KB. Up to 8 files now, more later from the note.</p>
+            <input ref={pickerRef} type="file" accept={ATTACHMENT_ACCEPT} multiple className="sr-only" tabIndex={-1} aria-label="Choose images or files" onChange={(event) => addFiles(event.target.files)} />
+            <button type="button" disabled={locked} onClick={() => pickerRef.current?.click()} className="btn-secondary mt-3">
+              <ImagePlus size={17} aria-hidden="true" /> Add image or file
+            </button>
+            {files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Files to attach">{files.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white py-1 pl-3 pr-1 text-sm">
+              <Paperclip size={15} className="shrink-0 text-slate-500" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 text-xs tabular-nums text-slate-600">{Math.ceil(file.size / 1024)} KB</span>
+              <button type="button" disabled={locked} onClick={() => setFiles((previous) => previous.filter((_, position) => position !== index))} className="icon-btn hover:bg-red-50 hover:text-red-700 disabled:opacity-40" aria-label={`Remove ${file.name}`}><Trash2 size={15} aria-hidden="true" /></button>
+            </li>)}</ul>}
+          </div>
+
+          {noteMode === "collab" && <div aria-labelledby="write-collaborators">
+            <h3 id="write-collaborators" className="label flex items-center gap-1.5"><Users size={14} aria-hidden="true" /> Invite collaborators <span className="font-normal text-slate-600">(optional)</span></h3>
+            <p className="text-sm text-slate-600">Friends you pick get an invitation when you save. They can join after accepting.</p>
+            {friendsError && <p role="alert" className="mt-3 text-sm text-red-700">{friendsError}</p>}
+            {friendsLoading && <div className="mt-3 h-10 w-64 animate-pulse rounded-xl bg-slate-100" aria-label="Loading friends" />}
+            {!friendsLoading && !friendsError && friends.length === 0 && <p className="mt-3 text-sm text-slate-700">No friends to invite yet. <Link href="/friends" className="font-semibold text-indigo-800 underline">Add friends</Link>, or invite them later from the note.</p>}
+            {friends.length > 0 && <>
+              <div className="mt-3 flex flex-wrap gap-2">{friends.map((friend) => {
+                const selected = selectedFriends.includes(friend.uid);
+                return <button key={friend.uid} type="button" aria-pressed={selected} disabled={locked} onClick={() => setSelectedFriends((previous) => selected ? previous.filter((id) => id !== friend.uid) : [...previous, friend.uid])}
+                  className={`${groupChip(selected)} disabled:opacity-50`}>
+                  {selected && <Check size={13} aria-hidden="true" />}{friend.displayName || "Friend"}
+                </button>;
+              })}</div>
+              {selectedFriends.length > 0 && <div className="mt-4">
+                <label htmlFor="write-permission" className="label">Access</label>
+                <select id="write-permission" value={permission} disabled={locked} onChange={(event) => setPermission(event.target.value as "editor" | "viewer")} className="field w-auto pr-8">
+                  <option value="editor">Can edit</option><option value="viewer">Can view</option>
+                </select>
+              </div>}
+            </>}
+          </div>}
+        </section>
+
+        {/* Save bar: stays in reach above the mobile tab bar while writing long notes. */}
+        <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between gap-3 rounded-card border-2 border-slate-900 bg-white p-2.5 pl-3 shadow-[var(--neubrutalism-shadow)] md:bottom-4">
+          <div className="min-w-0 flex-1 px-1 text-sm" aria-live="polite">
+            {(error || keyError) && <span role="alert" className="font-medium text-red-700">{error || keyError}</span>}
+            {success && <span className="flex items-center gap-2 font-medium text-emerald-800"><Check size={16} aria-hidden="true" /> Note saved</span>}
+            {saving && <span role="status" className="font-medium text-indigo-800">{saveStage || "Saving…"}</span>}
+            {!error && !keyError && !success && !saving && <span className="text-slate-600">{title.trim() && content.trim() ? <>Ready to save as <strong className="font-semibold text-slate-900">{noteModeInfo(noteMode).label}</strong></> : "Add a title and some content"}</span>}
+            {savedNoteId && error && <Link href={noteMode === "collab" ? `/collab/${savedNoteId}` : `/notes?open=${savedNoteId}`} className="mt-1 block text-xs font-semibold text-indigo-800 underline">Open saved note</Link>}
           </div>
           <button
             type="submit"
             disabled={!title.trim() || !content.trim() || saving}
-            className="bg-primary text-primary-foreground neubrutal min-h-11 w-full sm:w-auto px-8 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+            className="btn-primary shrink-0"
           >
-            {saving ? "Saving…" : savedNoteId ? "Retry remaining items" : "Post Note"}
+            {saving ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+            {saving ? "Saving…" : savedNoteId ? "Retry remaining items" : noteMode === "collab" ? "Create shared note" : "Save note"}
           </button>
         </div>
-      </motion.form>
+      </form>
 
+      <ConfirmDialog
+        open={pendingTemplate !== null}
+        title="Replace your writing?"
+        description={pendingTemplate ? `The "${pendingTemplate.label}" template will replace what you've written so far.` : undefined}
+        confirmLabel="Use template"
+        onConfirm={() => { if (pendingTemplate) applyTemplate(pendingTemplate); }}
+        onCancel={() => setPendingTemplate(null)}
+      />
     </div>
   );
 }
