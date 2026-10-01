@@ -143,7 +143,15 @@ export async function claimUsername(uid: string, raw: string): Promise<string> {
   if (problem) throw new Error(problem);
 
   const profileRef = doc(db, "public_profiles", uid);
-  const [profile, existing] = await Promise.all([getDoc(profileRef), getDoc(doc(db, "usernames", username))]);
+  let profile, existing;
+  try {
+    [profile, existing] = await Promise.all([getDoc(profileRef), getDoc(doc(db, "usernames", username))]);
+  } catch (error) {
+    if ((error as { code?: string }).code === "permission-denied") {
+      throw new Error("Usernames aren't switched on yet: the app's Firestore rules need to be published in the Firebase console.");
+    }
+    throw new Error("Couldn't check that username. Check your connection and try again.");
+  }
   const previous = profile.exists() ? (profile.data().username as string | undefined) : undefined;
   if (previous === username) return username;
   if (existing.exists()) throw new Error("That username is taken. Try another.");
