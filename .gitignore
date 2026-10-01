@@ -45,3 +45,7 @@ next-env.d.ts
 
 # personal notes
 AMAZON_SDE1_INTERN_PREP.md
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+# Personal Claude Code settings
+.claude/settings.local.json
