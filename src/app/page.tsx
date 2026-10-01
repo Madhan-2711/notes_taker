@@ -4,36 +4,38 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
-  BookOpen,
   Check,
+  CheckCheck,
   Clock3,
   FolderOpen,
   FolderPlus,
+  Inbox,
+  LoaderCircle,
   Lock,
   LockKeyhole,
-  LoaderCircle,
-  MessageSquareMore,
   PenLine,
   Pin,
-  Plus,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
+  UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useUserKeys } from "../hooks/useUserKeys";
+import { useVaultStatus } from "../hooks/useVaultStatus";
+import { useNoteTitle } from "../hooks/useNoteTitle";
 import { useNoteDraft } from "../contexts/NoteDraftContext";
+import { useInbox } from "../contexts/InboxContext";
 import { useNotePins } from "../hooks/useNotePins";
-import { OfflineStorageControl } from "../components/OfflineStorageControl";
+import { NoteModePicker } from "../components/NoteModePicker";
+import { ModeBadge } from "../components/ModeBadge";
 import { db, hasValidConfig } from "../lib/firebaseConfig";
 import {
   getNoteContent,
-  getNoteTitle,
   noteSchema,
+  isSecureNote,
   type CollabInvite,
   type Group,
   type Note,
@@ -42,22 +44,12 @@ import {
 import { createNormalNote, subscribeToNotes } from "../lib/services/notes/normalNotesService";
 import { createSecureNote } from "../lib/services/notes/secureNotesService";
 import { createCollabNote } from "../lib/services/notes/collaborativeNotesService";
-import { subscribeToInvites } from "../lib/services/social/collaborationService";
+import { acceptInvite, rejectInvite } from "../lib/services/social/collaborationService";
 import { recentNoteHref } from "../lib/noteNavigation";
+import { previewText } from "../lib/inlineImages";
 
-const NOTE_MODES: Array<{
-  value: NoteMode;
-  label: string;
-  description: string;
-  icon: typeof PenLine;
-}> = [
-  { value: "normal", label: "Note", description: "Quick and searchable", icon: PenLine },
-  { value: "secure", label: "Private", description: "End-to-end encrypted", icon: Lock },
-  { value: "collab", label: "Shared", description: "Edit together live", icon: Users },
-];
-
-function getFirstName(displayName: string | null): string {
-  return displayName?.trim().split(/\s+/)[0] || "Writer";
+function getFirstName(displayName: string | null): string | null {
+  return displayName?.trim().split(/\s+/)[0] || null;
 }
 
 function getGreeting(currentTime: number | null): string {
@@ -84,33 +76,81 @@ function formatRelativeTime(timestamp: number, currentTime: number | null): stri
   });
 }
 
-function modeDetails(note: Note) {
-  if (note.mode === "secure") {
-    return { label: "Private", icon: Lock, tone: "text-amber-700 bg-amber-500/10" };
-  }
-  if (note.mode === "collab") {
-    return { label: "Shared", icon: Users, tone: "text-rose-700 bg-rose-500/10" };
-  }
-  return { label: "Note", icon: PenLine, tone: "text-indigo-700 bg-indigo-500/10" };
+function RecentNoteCard({ note, currentTime }: { note: Note; currentTime: number | null }) {
+  const title = useNoteTitle(note);
+  const preview = isSecureNote(note) ? "End-to-end encrypted. Open to read." : previewText(getNoteContent(note));
+  return (
+    <Link
+      href={recentNoteHref(note)}
+      className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-slate-900 hover:shadow-[3px_3px_0_0_#0f172a]"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <ModeBadge mode={note.mode || "normal"} />
+        <span className="flex items-center gap-1 text-xs font-medium tabular-nums text-slate-600">
+          <Clock3 size={12} aria-hidden="true" /> {formatRelativeTime(note.updatedAt || note.createdAt, currentTime)}
+        </span>
+      </div>
+      <h3 className="truncate font-bold tracking-tight group-hover:text-indigo-800">{title}</h3>
+      <p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-slate-600">{preview}</p>
+    </Link>
+  );
+}
+
+function PinnedChip({ note }: { note: Note }) {
+  const title = useNoteTitle(note);
+  return (
+    <Link href={recentNoteHref(note)} className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-sm font-semibold text-indigo-900 hover:border-indigo-500">
+      <Pin size={14} aria-hidden="true" /><span className="truncate">{title}</span>
+    </Link>
+  );
+}
+
+function InviteRow({ invite, currentTime, canAccept, onAccept, onDecline }: {
+  invite: CollabInvite;
+  currentTime: number | null;
+  canAccept: boolean;
+  onAccept: () => Promise<void>;
+  onDecline: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
+  const [error, setError] = useState("");
+  const run = async (kind: "accept" | "decline", action: () => Promise<void>) => {
+    setBusy(kind);
+    setError("");
+    try { await action(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "That didn't work. Please try again."); }
+    finally { setBusy(null); }
+  };
+  return (
+    <li className="py-3 first:pt-0 last:pb-0">
+      <p className="text-sm text-slate-800">
+        <span className="font-bold">{invite.senderName || invite.senderEmail}</span> invited you to a shared note
+      </p>
+      <p className="mt-0.5 text-xs text-slate-600">{formatRelativeTime(invite.createdAt, currentTime)}, {invite.permission === "viewer" ? "can view" : "can edit"}</p>
+      <div className="mt-2 flex gap-2">
+        <button type="button" disabled={!canAccept || busy !== null} onClick={() => void run("accept", onAccept)} className="btn-secondary min-h-10 px-3">
+          {busy === "accept" ? <LoaderCircle size={15} className="animate-spin" aria-hidden="true" /> : <Check size={15} aria-hidden="true" />} Accept
+        </button>
+        <button type="button" disabled={busy !== null} onClick={() => void run("decline", onDecline)} className="btn-quiet min-h-10 px-3">
+          {busy === "decline" ? <LoaderCircle size={15} className="animate-spin" aria-hidden="true" /> : <X size={15} aria-hidden="true" />} Decline
+        </button>
+      </div>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+    </li>
+  );
 }
 
 export default function Home() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const { user, loading } = useAuth();
-  const {
-    publicKey,
-    isReady: keysReady,
-    hasKeys,
-    needsVaultPassword,
-    needsVaultSetup,
-    openVaultSetup,
-    error: vaultError,
-  } = useUserKeys();
+  const { publicKey, privateKey, isReady: keysReady, hasKeys, needsVaultSetup, openVaultSetup } = useUserKeys();
+  const vault = useVaultStatus();
+  const { invites, friendRequests, loaded: inboxLoaded } = useInbox();
 
-  const [notes, setNotes] = useState<Note[]>([]);
+  const [notes, setNotes] = useState<Note[] | null>(null);
   const { pinnedIds } = useNotePins(user?.uid);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [invites, setInvites] = useState<CollabInvite[]>([]);
   const { draft, update: updateDraft, clear: clearDraft } = useNoteDraft(user?.uid);
   const { mode: noteMode, title, content } = draft;
   const setNoteMode = (mode: NoteMode) => updateDraft({ mode });
@@ -156,30 +196,26 @@ export default function Home() {
     );
   }, [user]);
 
-  useEffect(() => {
-    if (!user || !hasValidConfig) return;
-    return subscribeToInvites(user.uid, setInvites);
-  }, [user]);
-
+  const allNotes = useMemo(() => notes ?? [], [notes]);
   const recentNotes = useMemo(
     () =>
-      [...notes]
+      [...allNotes]
         .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
         .slice(0, 4),
-    [notes]
+    [allNotes]
   );
-  const pinnedNotes = useMemo(() => notes.filter((note) => pinnedIds.has(note.id)).slice(0, 3), [notes, pinnedIds]);
+  const pinnedNotes = useMemo(() => allNotes.filter((note) => pinnedIds.has(note.id)).slice(0, 3), [allNotes, pinnedIds]);
 
   const groupCounts = useMemo(() => {
     const counts = new Map<string, number>();
     groups.forEach((group) => counts.set(group.id, 0));
-    notes.forEach((note) => {
+    allNotes.forEach((note) => {
       note.groupIds?.forEach((groupId) => {
         if (counts.has(groupId)) counts.set(groupId, (counts.get(groupId) ?? 0) + 1);
       });
     });
     return counts;
-  }, [groups, notes]);
+  }, [groups, allNotes]);
 
   const modeNeedsVault = noteMode !== "normal";
   const vaultAvailable = keysReady && hasKeys && Boolean(publicKey);
@@ -241,388 +277,240 @@ export default function Home() {
 
   if (!user) {
     return (
-      <div className="relative flex-1 overflow-hidden px-6 py-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.14),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.12),transparent_34%)]" />
-        <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
-            <Sparkles size={25} />
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-            Notes Taker for <span className="text-primary italic">every idea.</span>
+      <div className="relative flex-1 overflow-hidden px-4 py-16 sm:px-6 sm:py-24">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.12),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.10),transparent_34%)]" aria-hidden="true" />
+        <div className="relative mx-auto flex max-w-3xl flex-col gap-6">
+          <h1 className="max-w-2xl text-4xl font-bold tracking-tight sm:text-6xl">
+            Notes Taker for <span className="italic text-primary-strong">every idea.</span>
           </h1>
-          <p className="max-w-xl text-lg leading-relaxed text-foreground/60 sm:text-xl">
+          <p className="max-w-xl text-lg leading-relaxed text-slate-700">
             Capture ideas, organize your notes, protect private writing, and work together in real time.
           </p>
-          <p className="rounded-full border border-border bg-white/70 px-5 py-2.5 text-sm font-semibold shadow-sm backdrop-blur">
-            Sign in to open your workspace
-          </p>
-          <div className="mt-5 grid w-full gap-3 text-left sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4"><PenLine size={19} className="text-indigo-700" /><h2 className="mt-3 text-sm font-bold">Write and organize</h2><p className="mt-1 text-xs leading-5 text-slate-700">Keep your thoughts in notes and groups, with search when you need them.</p></div>
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4"><Lock size={19} className="text-indigo-700" /><h2 className="mt-3 text-sm font-bold">Private notes</h2><p className="mt-1 text-xs leading-5 text-slate-700">Choose encrypted notes for writing you want to keep private.</p></div>
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4"><Users size={19} className="text-indigo-700" /><h2 className="mt-3 text-sm font-bold">Create together</h2><p className="mt-1 text-xs leading-5 text-slate-700">Invite friends to collaborate on shared notes as you type.</p></div>
-          </div>
+          <p className="text-sm font-semibold text-slate-700">Sign in at the top of the page to open your workspace.</p>
+          <ul className="mt-6 grid w-full gap-x-8 gap-y-6 border-t border-slate-200 pt-8 sm:grid-cols-3">
+            <li><PenLine size={20} className="text-indigo-700" aria-hidden="true" /><h2 className="mt-3 text-sm font-bold">Write and organize</h2><p className="mt-1 text-sm leading-6 text-slate-700">Keep your thoughts in notes and groups, with search when you need them.</p></li>
+            <li><Lock size={20} className="text-indigo-700" aria-hidden="true" /><h2 className="mt-3 text-sm font-bold">Private notes</h2><p className="mt-1 text-sm leading-6 text-slate-700">Choose encrypted notes for writing you want to keep private.</p></li>
+            <li><Users size={20} className="text-indigo-700" aria-hidden="true" /><h2 className="mt-3 text-sm font-bold">Create together</h2><p className="mt-1 text-sm leading-6 text-slate-700">Invite friends to collaborate on shared notes as you type.</p></li>
+          </ul>
         </div>
       </div>
     );
   }
 
-  const latestInvite = invites[0];
-  const vaultState = vaultError
-    ? {
-        title: "Vault needs attention",
-        description: vaultError,
-        icon: ShieldAlert,
-        tone: "border-rose-200 bg-rose-50 text-rose-700",
-      }
-    : !keysReady
-      ? {
-          title: "Checking your vault",
-          description: "Confirming encryption is ready on this device.",
-          icon: LoaderCircle,
-          tone: "border-slate-200 bg-slate-50 text-slate-600",
-        }
-      : needsVaultPassword
-        ? {
-            title: "Vault is locked",
-            description: "Enter your vault password to open private and shared notes.",
-            icon: LockKeyhole,
-            tone: "border-amber-200 bg-amber-50 text-amber-700",
-          }
-        : needsVaultSetup
-          ? {
-              title: "Finish vault setup",
-              description: "Create a recovery password to protect your encryption key.",
-              icon: ShieldAlert,
-              tone: "border-amber-200 bg-amber-50 text-amber-700",
-            }
-          : {
-              title: "Vault protected",
-              description: "Private and shared notes are ready on this device.",
-              icon: ShieldCheck,
-              tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-            };
-  const VaultIcon = vaultState.icon;
+  const firstName = getFirstName(user.displayName);
+  const vaultNeedsAction = vault.kind === "locked" || vault.kind === "setup" || vault.kind === "error";
+  const VaultIcon = vault.icon;
+  const enter = (delay: number) => reduceMotion
+    ? {}
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay, duration: 0.3 } };
 
   return (
-    <div className="relative flex-1 overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_8%_2%,rgba(99,102,241,0.12),transparent_26%),radial-gradient(circle_at_92%_18%,rgba(16,185,129,0.10),transparent_24%)]" />
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
-        <motion.header
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
-        >
-          <div>
-            <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-primary">
-              <Sparkles size={14} /> Your workspace
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              {getGreeting(currentTime)}, {getFirstName(user.displayName)}.
-            </h1>
-            <p className="mt-2 text-sm text-foreground/50 sm:text-base">
-              {notes.length === 0
+    <div className="relative flex-1">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <motion.header {...enter(0)} className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            {getGreeting(currentTime)}{firstName ? `, ${firstName}` : ""}.
+          </h1>
+          <p className="mt-1.5 text-sm text-slate-600 sm:text-base">
+            {notes === null
+              ? "Loading your notes…"
+              : notes.length === 0
                 ? "Your next idea starts here."
-                : `${notes.length} ${notes.length === 1 ? "note" : "notes"} · ${groups.length} ${groups.length === 1 ? "group" : "groups"}${invites.length ? ` · ${invites.length} waiting` : ""}`}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/notes"
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-white/70 px-4 py-2.5 text-sm font-semibold shadow-sm backdrop-blur transition hover:border-primary/30 hover:text-primary"
-            >
-              <BookOpen size={16} /> My notes
-            </Link>
-            <Link
-              href="/write"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-[3px_3px_0_0_#0f172a] transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_#0f172a]"
-            >
-              <Plus size={16} /> New note
-            </Link>
-          </div>
+                : `${notes.length} ${notes.length === 1 ? "note" : "notes"}, ${groups.length} ${groups.length === 1 ? "group" : "groups"}`}
+          </p>
         </motion.header>
 
+        {vaultNeedsAction && (
+          <motion.div {...enter(0.03)} role="status" className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${vault.tone}`}>
+            <div className="flex items-start gap-3">
+              <VaultIcon size={20} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="font-bold">{vault.title}</p>
+                <p className="text-sm">{vault.description}</p>
+              </div>
+            </div>
+            {needsVaultSetup
+              ? <button type="button" onClick={openVaultSetup} className="btn-secondary shrink-0">Set recovery password</button>
+              : <Link href="/settings" className="btn-secondary shrink-0">Open vault settings</Link>}
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-          <motion.form
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.06 }}
-            onSubmit={handleQuickCapture}
-            className="glass rounded-card border border-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-7 lg:col-span-8"
-          >
-            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-foreground/35">Quick capture</p>
-                <h2 className="mt-1 text-xl font-bold tracking-tight">What’s on your mind?</h2>
+          <div className="flex flex-col gap-5 lg:col-span-8">
+            <motion.form {...enter(0.06)} onSubmit={handleQuickCapture} className="card p-5 sm:p-6" aria-labelledby="quick-capture-title">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <h2 id="quick-capture-title" className="text-lg font-bold tracking-tight">Quick capture</h2>
+                <NoteModePicker
+                  value={noteMode}
+                  onChange={(mode) => { setNoteMode(mode); setSaveError(null); setSaved(false); }}
+                  showDescription={false}
+                />
               </div>
-              <div className="grid grid-cols-3 rounded-2xl border border-border/70 bg-slate-50/80 p-1" aria-label="Note type">
-                {NOTE_MODES.map(({ value, label, icon: Icon }) => {
-                  const selected = noteMode === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => {
-                        setNoteMode(value);
-                        setSaveError(null);
-                        setSaved(false);
-                      }}
-                      className={`flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition sm:px-4 ${
-                        selected
-                          ? "bg-white text-primary shadow-sm ring-1 ring-border/70"
-                          : "text-foreground/45 hover:text-foreground"
-                      }`}
-                      aria-pressed={selected}
-                    >
-                      <Icon size={14} />
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
-            <label className="sr-only" htmlFor="quick-note-title">Note title</label>
-            <input
-              id="quick-note-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Give this thought a title"
-              maxLength={100}
-              className="w-full border-b border-border/70 bg-transparent pb-3 text-lg font-bold outline-none placeholder:text-foreground/25 focus:border-primary"
-            />
-            <label className="sr-only" htmlFor="quick-note-content">Note content</label>
-            <textarea
-              id="quick-note-content"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="Start typing — keep it short or turn it into something bigger later..."
-              maxLength={5000}
-              className="mt-4 min-h-28 w-full resize-none bg-transparent text-sm leading-7 outline-none placeholder:text-foreground/25 sm:min-h-32"
-            />
+              <label className="sr-only" htmlFor="quick-note-title">Note title</label>
+              <input
+                id="quick-note-title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Title"
+                maxLength={100}
+                className="w-full border-b border-slate-200 bg-transparent pb-3 text-lg font-bold placeholder:text-slate-500 focus:border-primary-strong focus:outline-none"
+              />
+              <label className="sr-only" htmlFor="quick-note-content">Note content</label>
+              <textarea
+                id="quick-note-content"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                placeholder="What's on your mind? Keep it short, or expand it into a full note later."
+                maxLength={5000}
+                className="mt-3 min-h-28 w-full resize-none bg-transparent text-[15px] leading-7 placeholder:text-slate-500 focus:outline-none sm:min-h-32"
+              />
 
-            {modeNeedsVault && !vaultAvailable && (
-              <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-medium text-amber-700">
-                <LockKeyhole size={15} className="mt-0.5 shrink-0" />
-                Finish unlocking or setting up your vault before creating this note type.
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 border-t border-border/50 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-h-5 text-xs font-medium" aria-live="polite">
-                {saveError ? (
-                  <span className="text-rose-600">{saveError}</span>
-                ) : saved ? (
-                  <span className="flex items-center gap-1.5 text-emerald-600"><Check size={14} /> Saved to your notes</span>
-                ) : (
-                  <span className="text-foreground/35">
-                    {NOTE_MODES.find((mode) => mode.value === noteMode)?.description}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <Link href="/write" className="inline-flex min-h-11 items-center text-xs font-semibold text-primary hover:underline">
-                  Add images or collaborators
-                </Link>
-                <button
-                  type="submit"
-                  disabled={!canSubmit}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-white transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-35"
-                >
-                  {saving ? <LoaderCircle size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                  {saving ? "Saving" : noteMode === "collab" ? "Create room" : "Save note"}
-                </button>
-              </div>
-            </div>
-          </motion.form>
-
-          <motion.section
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="rounded-card border border-slate-900 bg-slate-950 p-5 text-white shadow-[5px_5px_0_0_rgba(99,102,241,0.45)] sm:p-6 lg:col-span-4"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/75">Collaboration</p>
-                <h2 className="mt-1 text-xl font-bold">Your inbox</h2>
-              </div>
-              <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
-                <MessageSquareMore size={20} />
-                {invites.length > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-black ring-2 ring-slate-950">
-                    {invites.length > 9 ? "9+" : invites.length}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="my-7">
-              {latestInvite ? (
-                <div>
-                  <p className="text-3xl font-bold tracking-tight">{invites.length}</p>
-                  <p className="mt-1 text-sm text-white/75">
-                    {invites.length === 1 ? "invitation is waiting" : "invitations are waiting"}
-                  </p>
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs font-semibold text-white/75">Latest invitation</p>
-                    <p className="mt-1 truncate font-bold">{latestInvite.senderName || latestInvite.senderEmail}</p>
-                    <p className="mt-1 text-xs text-white/75">{formatRelativeTime(latestInvite.createdAt, currentTime)}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-4">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
-                    <Check size={22} />
-                  </div>
-                  <p className="font-bold">You’re all caught up</p>
-                  <p className="mt-2 text-sm leading-6 text-white/75">New collaboration invitations will appear here.</p>
+              {modeNeedsVault && !vaultAvailable && (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-900">
+                  <LockKeyhole size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  Unlock or set up your vault before creating this note type.
                 </div>
               )}
-            </div>
 
-            <Link
-              href="/friends"
-              className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-indigo-50"
-            >
-              Open collaboration centre <ArrowRight size={16} />
-            </Link>
-          </motion.section>
-
-          <motion.section
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.14 }}
-            className="glass rounded-card border border-white/70 p-5 sm:p-6 lg:col-span-8"
-          >
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-foreground/35">Recently updated</p>
-                <h2 className="mt-1 text-xl font-bold tracking-tight">Continue writing</h2>
-              </div>
-              <Link href="/notes" className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">
-                View all <ArrowRight size={14} />
-              </Link>
-            </div>
-
-            {pinnedNotes.length > 0 && <div className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3">
-              <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-indigo-800"><Pin size={14} /> Pinned for quick access</p>
-              <div className="flex flex-wrap gap-2">{pinnedNotes.map((note) => <Link key={note.id} href={recentNoteHref(note)} className="inline-flex min-h-11 max-w-full items-center rounded-xl border border-indigo-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:border-indigo-500 focus-visible:outline-2 focus-visible:outline-indigo-600"><span className="truncate">{getNoteTitle(note)}</span></Link>)}</div>
-            </div>}
-            {recentNotes.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {recentNotes.map((note) => {
-                  const details = modeDetails(note);
-                  const ModeIcon = details.icon;
-                  return (
-                    <Link
-                      key={note.id}
-                      href={recentNoteHref(note)}
-                      className="group rounded-2xl border border-border/70 bg-white/65 p-4 transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/5"
-                    >
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${details.tone}`}>
-                          <ModeIcon size={12} /> {details.label}
-                        </span>
-                        <span className="flex items-center gap-1 text-[11px] font-medium text-foreground/35">
-                          <Clock3 size={11} /> {formatRelativeTime(note.updatedAt || note.createdAt, currentTime)}
-                        </span>
-                      </div>
-                      <h3 className="truncate font-bold tracking-tight group-hover:text-primary">{getNoteTitle(note)}</h3>
-                      <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-foreground/45">{getNoteContent(note)}</p>
+              <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-h-5 text-sm font-medium" aria-live="polite">
+                  {saveError ? (
+                    <span className="text-red-700">{saveError}</span>
+                  ) : saved ? (
+                    <span className="flex items-center gap-1.5 text-emerald-800"><Check size={15} aria-hidden="true" /> Saved to your notes</span>
+                  ) : (
+                    <Link href="/write" className="inline-flex min-h-11 items-center text-sm font-semibold text-indigo-800 hover:underline">
+                      Add images, groups or collaborators
                     </Link>
-                  );
-                })}
+                  )}
+                </div>
+                <button type="submit" disabled={!canSubmit} className="btn-primary">
+                  {saving ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <ArrowRight size={16} aria-hidden="true" />}
+                  {saving ? "Saving" : noteMode === "collab" ? "Create shared note" : "Save note"}
+                </button>
               </div>
-            ) : (
-              <div className="flex min-h-44 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-center">
-                <PenLine size={23} className="mb-3 text-foreground/20" />
-                <p className="text-sm font-bold text-foreground/60">No notes yet</p>
-                <p className="mt-1 text-xs text-foreground/35">Use quick capture to save your first thought.</p>
-              </div>
-            )}
-          </motion.section>
+            </motion.form>
 
-          <motion.aside
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18 }}
-            className="glass rounded-card border border-white/70 p-5 sm:p-6 lg:col-span-4"
-          >
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-foreground/35">Security</p>
-            <h2 className="mt-1 text-xl font-bold tracking-tight">Vault status</h2>
-            <div className={`mt-5 rounded-2xl border p-4 ${vaultState.tone}`}>
-              <VaultIcon className={`h-7 w-7 ${!keysReady ? "animate-spin" : ""}`} />
-              <h3 className="mt-4 font-bold">{vaultState.title}</h3>
-              <p className="mt-1 text-xs leading-5 opacity-75">{vaultState.description}</p>
-            </div>
-            {needsVaultSetup ? (
-              <button
-                type="button"
-                onClick={openVaultSetup}
-                className="mt-4 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 text-sm font-bold transition hover:border-primary/30 hover:text-primary"
-              >
-                Set recovery password <ArrowRight size={15} />
-              </button>
-            ) : (
-              <Link
-                href="/friends"
-                className="mt-4 flex items-center justify-between rounded-xl border border-border px-4 py-3 text-sm font-bold transition hover:border-primary/30 hover:text-primary"
-              >
-                Manage vault backup <ArrowRight size={15} />
-              </Link>
-            )}
-            <OfflineStorageControl />
-          </motion.aside>
-
-          <motion.section
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.22 }}
-            className="glass rounded-card border border-white/70 p-5 sm:p-6 lg:col-span-12"
-          >
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-foreground/35">Organise</p>
-                <h2 className="mt-1 text-xl font-bold tracking-tight">Your groups</h2>
+            <motion.section {...enter(0.1)} aria-labelledby="recent-title">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 id="recent-title" className="text-lg font-bold tracking-tight">Continue writing</h2>
+                <Link href="/notes" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-50">
+                  All notes <ArrowRight size={15} aria-hidden="true" />
+                </Link>
               </div>
-              <Link href="/groups" className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">
-                Manage groups <ArrowRight size={14} />
-              </Link>
-            </div>
 
-            {groups.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {groups.slice(0, 4).map((group) => (
-                  <Link
-                    key={group.id}
-                    href={`/groups/${group.id}`}
-                    className="group relative overflow-hidden rounded-2xl border border-border/70 bg-white/65 p-4 transition hover:-translate-y-0.5 hover:shadow-lg"
-                  >
-                    <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: group.color }} />
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${group.color}18`, color: group.color }}>
-                        <FolderOpen size={18} />
-                      </div>
-                      <ArrowRight size={15} className="text-foreground/20 transition group-hover:translate-x-1 group-hover:text-primary" />
-                    </div>
-                    <h3 className="mt-4 truncate font-bold">{group.title}</h3>
-                    <p className="mt-1 text-xs font-medium text-foreground/40">
-                      {groupCounts.get(group.id) ?? 0} {(groupCounts.get(group.id) ?? 0) === 1 ? "note" : "notes"}
-                    </p>
-                  </Link>
-                ))}
+              {pinnedNotes.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2" aria-label="Pinned notes">
+                  {pinnedNotes.map((note) => <PinnedChip key={note.id} note={note} />)}
+                </div>
+              )}
+              {notes === null ? (
+                <div className="grid gap-3 sm:grid-cols-2" aria-busy="true" aria-label="Loading recent notes">
+                  {[0, 1].map((index) => <div key={index} className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
+                </div>
+              ) : recentNotes.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {recentNotes.map((note) => <RecentNoteCard key={note.id} note={note} currentTime={currentTime} />)}
+                </div>
+              ) : (
+                <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 px-6 text-center">
+                  <PenLine size={22} className="mb-2 text-indigo-700" aria-hidden="true" />
+                  <p className="text-sm font-bold text-slate-900">No notes yet</p>
+                  <p className="mt-1 text-sm text-slate-600">Use quick capture above to save your first thought.</p>
+                </div>
+              )}
+            </motion.section>
+          </div>
+
+          {/* On phones, waiting invitations jump above quick capture so they aren't missed. */}
+          <div className={`flex flex-col gap-5 lg:order-none lg:col-span-4 ${invites.length + friendRequests.length > 0 ? "order-first" : ""}`}>
+            <motion.section {...enter(0.08)} aria-labelledby="inbox-title" className="panel p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="inbox-title" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+                  <Inbox size={18} aria-hidden="true" /> Inbox
+                </h2>
+                {invites.length + friendRequests.length > 0 && (
+                  <span className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-bold text-white">{invites.length + friendRequests.length}</span>
+                )}
               </div>
-            ) : (
-              <Link
-                href="/groups"
-                className="flex min-h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-border text-center transition hover:border-primary/40 hover:bg-primary/[0.03]"
-              >
-                <FolderPlus size={22} className="mb-2 text-primary" />
-                <p className="text-sm font-bold">Create your first group</p>
-                <p className="mt-1 text-xs text-foreground/35">Keep related notes together.</p>
-              </Link>
-            )}
-          </motion.section>
+              {!inboxLoaded ? (
+                <div className="mt-4 h-16 animate-pulse rounded-xl bg-slate-100" aria-label="Loading inbox" />
+              ) : invites.length === 0 && friendRequests.length === 0 ? (
+                <p className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                  <CheckCheck size={16} className="text-emerald-700" aria-hidden="true" /> All caught up
+                </p>
+              ) : (
+                <div className="mt-4">
+                  {invites.length > 0 && (
+                    <>
+                      {!privateKey && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">Unlock your vault to accept shared notes.</p>}
+                      <ul className="divide-y divide-slate-200">
+                        {invites.slice(0, 3).map((invite) => (
+                          <InviteRow
+                            key={invite.id}
+                            invite={invite}
+                            currentTime={currentTime}
+                            canAccept={Boolean(privateKey)}
+                            onAccept={async () => {
+                              if (!privateKey) throw new Error("Unlock your vault to accept this invitation.");
+                              await acceptInvite(invite.id, user.uid, privateKey);
+                              router.push(`/collab/${invite.noteId}`);
+                            }}
+                            onDecline={() => rejectInvite(invite.id)}
+                          />
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {friendRequests.length > 0 && (
+                    <Link href="/friends" className={`flex min-h-11 items-center gap-2 rounded-xl text-sm font-semibold text-indigo-800 hover:underline ${invites.length > 0 ? "mt-3 border-t border-slate-200 pt-3" : ""}`}>
+                      <UserPlus size={16} aria-hidden="true" />
+                      {friendRequests.length} friend {friendRequests.length === 1 ? "request" : "requests"} waiting
+                    </Link>
+                  )}
+                  {invites.length > 3 && (
+                    <Link href="/friends" className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-indigo-800 hover:underline">
+                      See all {invites.length} invitations
+                    </Link>
+                  )}
+                </div>
+              )}
+            </motion.section>
+
+            <motion.section {...enter(0.12)} aria-labelledby="groups-title" className="panel p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 id="groups-title" className="text-lg font-bold tracking-tight">Groups</h2>
+                <Link href="/groups" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-50">
+                  Manage <ArrowRight size={15} aria-hidden="true" />
+                </Link>
+              </div>
+              {groups.length > 0 ? (
+                <ul className="-mx-2">
+                  {groups.slice(0, 5).map((group) => (
+                    <li key={group.id}>
+                      <Link href={`/groups/${group.id}`} className="flex min-h-11 items-center gap-3 rounded-xl px-2 hover:bg-slate-100">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${group.color}1f`, color: group.color }}>
+                          <FolderOpen size={16} aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">{group.title}</span>
+                        <span className="text-xs tabular-nums text-slate-600">{groupCounts.get(group.id) ?? 0}</span>
+                      </Link>
+                    </li>
+                  ))}
+                  {groups.length > 5 && (
+                    <li><Link href="/groups" className="flex min-h-10 items-center px-2 text-sm font-semibold text-indigo-800 hover:underline">{groups.length - 5} more</Link></li>
+                  )}
+                </ul>
+              ) : (
+                <Link href="/groups" className="flex min-h-24 flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-center hover:border-indigo-400 hover:bg-indigo-50/50">
+                  <FolderPlus size={20} className="mb-1.5 text-indigo-700" aria-hidden="true" />
+                  <span className="text-sm font-bold text-slate-900">Create your first group</span>
+                  <span className="text-xs text-slate-600">Keep related notes together.</span>
+                </Link>
+              )}
+            </motion.section>
+          </div>
         </div>
       </div>
     </div>
