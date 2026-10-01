@@ -21,7 +21,6 @@ export const metadata: Metadata = {
   description: "Capture ideas, organize personal notes, and collaborate in real time. Choose normal notes, encrypted private notes, or secure shared notes in Notes Taker.",
   applicationName: "Notes Taker",
   appleWebApp: { capable: true, title: "Notes", statusBarStyle: "default" },
-  icons: { apple: "/icons/apple-touch-icon.png" },
   robots: { index: isIndexableDeployment(), follow: isIndexableDeployment() },
   openGraph: {
     type: "website",

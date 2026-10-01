@@ -10,10 +10,13 @@ export function useMyUsername(userId: string | undefined): string | null | undef
 
   useEffect(() => {
     if (!userId || !hasValidConfig) return;
-    return onSnapshot(doc(db, "public_profiles", userId), (snapshot) => {
+    return onSnapshot(doc(db, "public_profiles", userId), { includeMetadataChanges: true }, (snapshot) => {
       if (!snapshot.exists()) return;
       const value = snapshot.data().username;
-      setState({ userId, username: typeof value === "string" && value ? value : null });
+      const username = typeof value === "string" && value ? value : null;
+      // An offline-cache copy may predate the username; only trust "none" once the server confirms it.
+      if (username === null && snapshot.metadata.fromCache) return;
+      setState({ userId, username });
     }, (error) => console.error("Profile subscription error:", error));
   }, [userId]);
 

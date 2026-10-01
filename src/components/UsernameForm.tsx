@@ -15,6 +15,7 @@ export function UsernameForm({ userId, initial = "", submitLabel = "Save", onSav
   const [value, setValue] = useState(initial);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState("");
   const inputId = `username-${userId}`;
 
   const submit = async (event: React.FormEvent) => {
@@ -23,8 +24,11 @@ export function UsernameForm({ userId, initial = "", submitLabel = "Save", onSav
     if (problem) { setError(problem); return; }
     setBusy(true);
     setError("");
+    setSaved("");
     try {
-      onSaved?.(await claimUsername(userId, value));
+      const username = await claimUsername(userId, value);
+      setSaved(username);
+      onSaved?.(username);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save your username.");
     } finally {
@@ -49,6 +53,7 @@ export function UsernameForm({ userId, initial = "", submitLabel = "Save", onSav
       </div>
       <p id={`${inputId}-hint`} className="mt-1.5 text-xs text-slate-500">3–20 letters, numbers or underscores. Friends can find you with it.</p>
       {error && <p role="alert" className="mt-1.5 text-sm text-red-700">{error}</p>}
+      {saved && !error && <p role="status" className="mt-1.5 text-sm font-semibold text-emerald-700">Saved. Friends can find you as @{saved}.</p>}
     </form>
   );
 }
