@@ -353,6 +353,7 @@ export default function Home() {
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Title"
+                autoComplete="off"
                 maxLength={100}
                 className="w-full border-b border-slate-200 bg-transparent pb-3 text-lg font-bold placeholder:text-slate-500 focus:border-primary-strong focus:outline-none"
               />

@@ -124,7 +124,7 @@ export function KeyBackupRestore({
       const publicJwk = { ...publicFields, key_ops: ["wrapKey"] };
       await updatePublicKey(userId, JSON.stringify(publicJwk));
 
-      setSuccess("Keys restored successfully! Reloading...");
+      setSuccess("Keys restored. Reloading…");
       setTimeout(() => {
         onRestoreSuccess();
         handleClose();
@@ -162,8 +162,8 @@ export function KeyBackupRestore({
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold tracking-tight">
                 {mode === "menu" && "Back up or restore keys"}
-                {mode === "backup" && "Backup to Cloud"}
-                {mode === "restore" && "Restore from Cloud"}
+                {mode === "backup" && "Back up to cloud"}
+                {mode === "restore" && "Restore from cloud"}
               </h2>
               <button onClick={handleClose} className="text-foreground/40 hover:text-foreground p-1">
                 <X size={20} />
@@ -196,7 +196,7 @@ export function KeyBackupRestore({
                 <button
                   onClick={() => { resetState(); setMode("backup"); }}
                   disabled={!privateKey}
-                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
                     <CloudUpload size={18} className="text-emerald-600" />
@@ -209,7 +209,7 @@ export function KeyBackupRestore({
 
                 <button
                   onClick={() => { resetState(); setMode("restore"); }}
-                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
                 >
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                     <CloudDownload size={18} className="text-primary" />
@@ -248,7 +248,7 @@ export function KeyBackupRestore({
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="At least 6 characters..."
+                      placeholder="At least 6 characters…"
                       className="w-full bg-transparent border-b border-border/50 pb-3 pr-10 focus:outline-none focus:border-primary transition-colors font-medium"
                       autoFocus
                     />
@@ -271,7 +271,7 @@ export function KeyBackupRestore({
                     type={showPassword ? "text" : "password"}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter passcode..."
+                    placeholder="Re-enter passcode…"
                     className="w-full bg-transparent border-b border-border/50 pb-3 focus:outline-none focus:border-primary transition-colors font-medium"
                   />
                 </div>
@@ -288,7 +288,7 @@ export function KeyBackupRestore({
                     disabled={!password || !confirmPassword || loading}
                     className="btn-primary flex-1"
                   >
-                    {loading ? "Backing up..." : "Backup to Cloud"}
+                    {loading ? "Backing up…" : "Back up to cloud"}
                   </button>
                 </div>
               </div>
@@ -316,7 +316,7 @@ export function KeyBackupRestore({
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your backup passcode..."
+                      placeholder="Enter your backup passcode…"
                       className="w-full bg-transparent border-b border-border/50 pb-3 pr-10 focus:outline-none focus:border-primary transition-colors font-medium"
                       autoFocus
                     />
@@ -342,7 +342,7 @@ export function KeyBackupRestore({
                     disabled={!password || loading}
                     className="btn-primary flex-1"
                   >
-                    {loading ? "Restoring..." : "Restore from Cloud"}
+                    {loading ? "Restoring…" : "Restore from cloud"}
                   </button>
                 </div>
               </div>

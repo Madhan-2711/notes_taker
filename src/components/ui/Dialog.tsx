@@ -105,7 +105,7 @@ export function Dialog({ open, onClose, labelledBy, label, children, size = "md"
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: 16, scale: 0.98, transition: { duration: 0.14, ease: "easeIn" } }}
             transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className={`relative flex w-full flex-col overflow-hidden border-2 border-slate-900 bg-white shadow-[var(--neubrutalism-shadow)] focus:outline-none ${shape} ${SIZES[size]} ${className}`}
+            className={`relative flex w-full flex-col overflow-hidden overscroll-contain [&_.overflow-y-auto]:overscroll-contain border-2 border-slate-900 bg-white shadow-[var(--neubrutalism-shadow)] focus:outline-none ${shape} ${SIZES[size]} ${className}`}
           >
             {children}
           </motion.div>

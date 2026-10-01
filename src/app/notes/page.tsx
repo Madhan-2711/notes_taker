@@ -275,7 +275,8 @@ function NotesPageContent() {
             type="search"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search titles, writing, groups or #tags"
+            placeholder="Search titles, writing, groups or #tags…"
+            autoComplete="off"
             aria-describedby={searchActive ? "search-status" : undefined}
             className="h-12 w-full rounded-xl border-2 border-slate-900 bg-white pl-11 pr-12 text-[15px] text-slate-900 shadow-[3px_3px_0_0_#0f172a] placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-indigo-200"
           />

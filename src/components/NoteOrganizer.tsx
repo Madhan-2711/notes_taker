@@ -60,7 +60,7 @@ export function NoteTagEditor({ noteId }: { noteId: string }) {
             <label className="sr-only" htmlFor={`tag-${noteId}`}>Add a tag</label>
             <div className="relative">
               <Hash size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden="true" />
-              <input id={`tag-${noteId}`} list={listId} value={tagInput} autoFocus onChange={(event) => setTagInput(event.target.value)} placeholder="tag name" maxLength={30}
+              <input id={`tag-${noteId}`} list={listId} value={tagInput} autoFocus onChange={(event) => setTagInput(event.target.value)} placeholder="tag name…" maxLength={30} autoComplete="off"
                 onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setAdding(false); setTagInput(""); } }}
                 onBlur={() => { if (!tagInput.trim()) setAdding(false); }}
                 className="h-9 w-36 rounded-full border border-slate-300 bg-white pl-7 pr-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />

@@ -81,7 +81,7 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your vault password..."
+                  placeholder="Enter your vault password…"
                   className="w-full bg-transparent border-b border-border/50 pb-3 pr-10 focus:outline-none focus:border-primary transition-colors font-medium"
                   autoFocus
                 />
@@ -106,7 +106,7 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
               disabled={!password || unlocking}
               className="btn-primary w-full"
             >
-              {unlocking ? "Unlocking..." : "Unlock"}
+              {unlocking ? "Unlocking…" : "Unlock"}
             </button>
           </motion.form>
         </motion.div>

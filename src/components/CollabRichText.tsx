@@ -50,7 +50,7 @@ export function CollabRichText({ text, editable, toolbarContainer, remoteUsers, 
         // Only these formats are accepted, including from collaborators' updates, so
         // links, embeds and raw HTML can never enter the shared document.
         formats: RICH_FORMATS,
-        placeholder: "Start collaborating...",
+        placeholder: "Start collaborating…",
         modules: {
           toolbar: RICH_TOOLBAR,
           cursors: { transformOnTextChange: true, hideDelayMs: 1500 },

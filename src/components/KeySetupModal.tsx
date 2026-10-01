@@ -96,7 +96,7 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters..."
+                  placeholder="At least 6 characters…"
                   className="w-full bg-transparent border-b border-border/50 pb-3 pr-10 focus:outline-none focus:border-primary transition-colors font-medium"
                   minLength={6}
                 />
@@ -119,7 +119,7 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
                 type={showPassword ? "text" : "password"}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Re-enter your password..."
+                placeholder="Re-enter your password…"
                 className="w-full bg-transparent border-b border-border/50 pb-3 focus:outline-none focus:border-primary transition-colors font-medium"
               />
             </div>

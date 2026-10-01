@@ -204,7 +204,7 @@ export default function FriendsPage() {
               type="text"
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              placeholder="Username or email address"
+              placeholder="Username or email address…"
               autoCapitalize="none"
               autoComplete="off"
               spellCheck={false}

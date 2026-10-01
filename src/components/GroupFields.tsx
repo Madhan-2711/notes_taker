@@ -29,6 +29,7 @@ export function GroupFields({ idPrefix, title, onTitleChange, color, onColorChan
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
           maxLength={50}
+          autoComplete="off"
           data-autofocus
           className="field text-base font-semibold"
         />

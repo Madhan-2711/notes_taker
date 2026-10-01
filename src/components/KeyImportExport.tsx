@@ -207,7 +207,7 @@ export function KeyImportExport({
         console.warn("Could not update vault backup:", vaultErr);
       }
 
-      setSuccess("Keys imported successfully! Reloading...");
+      setSuccess("Keys imported. Reloading…");
 
       // Reload after a brief delay to reinitialize key state
       setTimeout(() => {
@@ -283,7 +283,7 @@ export function KeyImportExport({
                 <button
                   onClick={() => { resetState(); setMode("export"); }}
                   disabled={!privateKey}
-                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
                     <Download size={18} className="text-emerald-600" />
@@ -296,7 +296,7 @@ export function KeyImportExport({
 
                 <button
                   onClick={() => { resetState(); setMode("import"); }}
-                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
                 >
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                     <Upload size={18} className="text-primary" />
@@ -356,7 +356,7 @@ export function KeyImportExport({
                     className="btn-primary flex-1"
                   >
                     {loading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                    {loading ? "Exporting..." : "Export"}
+                    {loading ? "Exporting…" : "Export"}
                   </button>
                 </div>
               </div>
@@ -379,7 +379,7 @@ export function KeyImportExport({
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 border-dashed transition-all text-left ${
+                  className={`flex items-center gap-3 p-4 rounded-xl border-2 border-dashed transition-colors text-left ${
                     importFile
                       ? "border-emerald-300 bg-emerald-50/50"
                       : "border-border/50 hover:border-primary/40"
@@ -388,7 +388,7 @@ export function KeyImportExport({
                   <Upload size={18} className={importFile ? "text-emerald-600" : "text-foreground/40"} />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold truncate">
-                      {importFile ? importFileName : "Choose key file..."}
+                      {importFile ? importFileName : "Choose key file…"}
                     </p>
                     {importFile && (
                       <p className="text-xs text-foreground/40">
@@ -405,7 +405,7 @@ export function KeyImportExport({
                       File picker not working? Open the .json file in a text editor, copy everything, and paste below:
                     </p>
                     <textarea
-                      placeholder='Paste the JSON content here...'
+                      placeholder='Paste the JSON content here…'
                       rows={3}
                       className="w-full bg-border/20 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
                       onPaste={(e) => {
@@ -459,7 +459,7 @@ export function KeyImportExport({
                     className="btn-primary flex-1"
                   >
                     {loading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                    {loading ? "Importing..." : "Import"}
+                    {loading ? "Importing…" : "Import"}
                   </button>
                 </div>
               </div>

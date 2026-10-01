@@ -210,6 +210,7 @@ export function EditNoteModal({
                     onChange={(e) => setTitle(e.target.value)}
                     className="w-full border-b border-slate-300 bg-transparent pb-3 text-xl font-bold transition-colors placeholder:text-slate-500 focus:border-primary-strong focus:outline-none"
                     maxLength={100}
+                    autoComplete="off"
                     data-autofocus
                   />
                 </div>

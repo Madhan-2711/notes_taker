@@ -59,7 +59,7 @@ export function NotePickerGrid({ notes, selectedIds, onToggle }: NotePickerGridP
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => onToggle(note.id)}
-                  className={`relative text-left p-3 rounded-xl border-2 transition-all duration-150 ${
+                  className={`relative text-left p-3 rounded-xl border-2 transition-colors duration-150 ${
                     isSelected
                       ? "border-indigo-700 bg-indigo-50"
                       : "border-slate-200 bg-white hover:border-indigo-400"

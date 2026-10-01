@@ -154,7 +154,7 @@ export function CollaboratorManager({
                           key={friend.uid}
                           type="button"
                           onClick={() => setSelectedFriend(friend.uid)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors ${
                             selectedFriend === friend.uid
                               ? "bg-emerald-50 border-2 border-emerald-300"
                               : "bg-border/20 border-2 border-transparent hover:border-border/60"
@@ -181,7 +181,7 @@ export function CollaboratorManager({
                           key={p}
                           type="button"
                           onClick={() => setPermission(p)}
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
                             permission === p
                               ? "bg-emerald-500 text-white border-emerald-500"
                               : "bg-transparent text-foreground/50 border-border/60 hover:border-emerald-300"
