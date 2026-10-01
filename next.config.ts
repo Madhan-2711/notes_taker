@@ -17,6 +17,9 @@ const ContentSecurityPolicy = [
   // Google profile photos
   "img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.googleusercontent.com",
 
+  // Decrypted voice notes play from in-memory blob URLs.
+  "media-src 'self' blob:",
+
   // No external fonts
   "font-src 'self'",
 
@@ -47,6 +50,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Always fetch the latest service worker so app updates reach installed users.
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -54,7 +66,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+            value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
           },
           {
             key: "Strict-Transport-Security",

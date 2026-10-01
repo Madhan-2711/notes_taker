@@ -44,6 +44,8 @@ export interface NormalNote extends BaseNote {
   mode: "normal";
   title: string;
   content: string;
+  /** Formatted body as a Quill Delta JSON string; `content` keeps the plain text. */
+  richContent?: string;
 }
 
 // ── Secure Note ───────────────────────────────────────────────────────────────
@@ -52,6 +54,8 @@ export interface SecureNote extends BaseNote {
   mode: "secure";
   encryptedTitle: string;
   encryptedContent: string;
+  /** Encrypted Quill Delta JSON; its IV is stored under "rich" in `iv`. */
+  encryptedRichContent?: string;
   iv: string;
   /** Map of userId → RSA-wrapped AES key (base64) */
   encryptedKeys: Record<string, string>;

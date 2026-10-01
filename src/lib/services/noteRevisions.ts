@@ -1,5 +1,5 @@
 import { auth, db } from "../firebaseConfig";
-import { collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query, writeBatch, type DocumentData, type WriteBatch } from "firebase/firestore";
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query, writeBatch, type DocumentData, type WriteBatch } from "firebase/firestore";
 
 export interface NoteRevision {
   id: string;
@@ -10,6 +10,8 @@ export interface NoteRevision {
   content?: string;
   encryptedTitle?: string;
   encryptedContent?: string;
+  richContent?: string;
+  encryptedRichContent?: string;
   iv?: string;
   titleIv?: string;
   latestSnapshot?: string;
@@ -24,10 +26,10 @@ export function addRevisionToBatch(batch: WriteBatch, noteId: string, data: Docu
   if (mode === "collab" && (!data.encryptedTitle || !data.titleIv || !data.latestSnapshot || !data.snapshotIv)) return;
   const base = { mode, editorId, createdAt: Date.now() };
   const payload = mode === "secure"
-    ? { ...base, encryptedTitle: data.encryptedTitle, encryptedContent: data.encryptedContent, iv: data.iv }
+    ? { ...base, encryptedTitle: data.encryptedTitle, encryptedContent: data.encryptedContent, iv: data.iv, ...(data.encryptedRichContent ? { encryptedRichContent: data.encryptedRichContent } : {}) }
     : mode === "collab"
       ? { ...base, title: data.title, encryptedTitle: data.encryptedTitle, titleIv: data.titleIv, latestSnapshot: data.latestSnapshot, snapshotIv: data.snapshotIv }
-      : { ...base, title: data.title, content: data.content };
+      : { ...base, title: data.title, content: data.content, ...(data.richContent ? { richContent: data.richContent } : {}) };
   batch.set(doc(collection(db, "notes", noteId, "revisions")), payload);
 }
 
@@ -47,8 +49,8 @@ export async function restoreRevision(noteId: string, revisionId: string): Promi
   const data = revisionSnap.data() as NoteRevision;
   if (data.mode !== (noteSnap.data().mode || "normal") || data.mode === "collab") throw new Error("This version cannot be restored from here.");
   const replacement = data.mode === "secure"
-    ? { encryptedTitle: data.encryptedTitle, encryptedContent: data.encryptedContent, iv: data.iv, updatedAt: Date.now() }
-    : { title: data.title, content: data.content, updatedAt: Date.now() };
+    ? { encryptedTitle: data.encryptedTitle, encryptedContent: data.encryptedContent, encryptedRichContent: data.encryptedRichContent ?? deleteField(), iv: data.iv, updatedAt: Date.now() }
+    : { title: data.title, content: data.content, richContent: data.richContent ?? deleteField(), updatedAt: Date.now() };
   const batch = writeBatch(db);
   addRevisionToBatch(batch, noteId, noteSnap.data(), uid);
   batch.update(noteSnap.ref, replacement);

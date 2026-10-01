@@ -11,7 +11,9 @@ import {
   getNoteContent,
 } from "../lib/validations";
 import { ModeBadge } from "./ModeBadge";
-import { Trash2, Pencil, Eye, Users, Pin } from "lucide-react";
+import { previewText } from "../lib/inlineImages";
+import { useNow } from "../hooks/useNow";
+import { Trash2, Pencil, Eye, Users, Pin, Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
 import { useUserKeysContext } from "../contexts/UserKeysContext";
@@ -26,11 +28,14 @@ interface NoteCardProps {
   pinned?: boolean;
   onTogglePin?: (id: string) => void;
   canDelete?: boolean;
+  tags?: string[];
+  reminderAt?: number | null;
 }
 
-export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true }: NoteCardProps) {
+export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true, tags = [], reminderAt = null }: NoteCardProps) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const now = useNow();
   const { user } = useAuth();
   const { privateKey } = useUserKeysContext();
   const [decrypted, setDecrypted] = useState<{ id: string; title: string } | null>(null);
@@ -62,9 +67,7 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
   // Display content — encrypted notes show a placeholder, collab notes show collaborator info
   const displayContent = isSecureNote(note)
     ? "This note is end-to-end encrypted. Open to decrypt and view."
-    : isCollabNote(note)
-    ? getNoteContent(note)
-    : getNoteContent(note);
+    : previewText(getNoteContent(note));
 
   // Disable edit for collab notes (those use the Yjs editor)
   const canEdit = !isCollabNote(note);
@@ -140,6 +143,20 @@ export function NoteCard({ note, groups = [], onDelete, onEdit, onView, pinned =
         <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
           <Users size={12} />
           {note.collaboratorIds.length} collaborator{note.collaboratorIds.length !== 1 ? "s" : ""}
+        </div>
+      )}
+
+      {(tags.length > 0 || reminderAt) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {reminderAt && (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${reminderAt < now ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+              <Bell size={11} /> {new Date(reminderAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          {tags.slice(0, 3).map((tag) => (
+            <span key={tag} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">#{tag}</span>
+          ))}
+          {tags.length > 3 && <span className="text-xs font-semibold text-foreground/40">+{tags.length - 3}</span>}
         </div>
       )}
 

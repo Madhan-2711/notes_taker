@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
-import { InlineNoteContent } from "./InlineNoteContent";
+import { RichNoteEditor } from "./RichNoteEditor";
+import { deltaFromPlain, parseRichContent } from "../lib/richText";
 import { NoteHistory } from "./NoteHistory";
+import { NoteOrganizer } from "./NoteOrganizer";
 import {
   type Note,
   type Group,
@@ -40,11 +42,12 @@ export function ViewNoteModal({
   privateKey,
 }: ViewNoteModalProps) {
   const [decrypted, setDecrypted] = useState<{
-    noteId: string; userId: string; key: CryptoKey; title: string; content: string;
+    noteId: string; userId: string; key: CryptoKey; title: string; content: string; richContent: string | null;
   } | null>(null);
   const matchesNote = decrypted?.noteId === note?.id && decrypted?.userId === userId && decrypted?.key === privateKey;
   const decryptedTitle = matchesNote ? decrypted?.title ?? null : null;
   const decryptedContent = matchesNote ? decrypted?.content ?? null : null;
+  const decryptedRich = matchesNote ? decrypted?.richContent ?? null : null;
   const [decrypting, setDecrypting] = useState(false);
   const [decryptError, setDecryptError] = useState<string | null>(null);
 
@@ -69,9 +72,9 @@ export function ViewNoteModal({
     setDecryptError(null);
 
     readSecureNote(note.id, userId, privateKey)
-      .then(({ title, content }) => {
+      .then(({ title, content, richContent }) => {
         if (!cancelled) {
-          setDecrypted({ noteId: note.id, userId, key: privateKey, title, content });
+          setDecrypted({ noteId: note.id, userId, key: privateKey, title, content, richContent });
         }
       })
       .catch((err) => {
@@ -230,7 +233,12 @@ export function ViewNoteModal({
                     </div>
                   </div>
                 ) : decryptedContent ? (
-                  <InlineNoteContent content={decryptedContent} noteId={note.id} userId={userId} privateKey={privateKey ?? null} />
+                  <RichNoteEditor
+                    key={`${note.id}:${note.updatedAt}`}
+                    readOnly
+                    initial={parseRichContent(decryptedRich) ?? deltaFromPlain(decryptedContent)}
+                    images={userId ? { noteId: note.id, userId, privateKey: privateKey ?? null } : null}
+                  />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
@@ -257,13 +265,19 @@ export function ViewNoteModal({
                   </Link>
                 </div>
               ) : (
-                <InlineNoteContent content={getNoteContent(note)} noteId={note.id} userId={userId} privateKey={null} />
+                <RichNoteEditor
+                  key={`${note.id}:${note.updatedAt}`}
+                  readOnly
+                  initial={(isNormalNote(note) && parseRichContent(note.richContent)) || deltaFromPlain(getNoteContent(note))}
+                  images={userId ? { noteId: note.id, userId, privateKey: null } : null}
+                />
               )}
-              {isNormalNote(note) && <NoteExport title={note.title} content={note.content} />}
+              {isNormalNote(note) && <NoteExport title={note.title} content={note.content} delta={parseRichContent(note.richContent)} images={userId ? { noteId: note.id, userId, privateKey: null } : null} />}
               {isNormalNote(note) && userId && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={null} knownNote={note} />}
-              {isSecureNote(note) && !decrypting && !decryptError && decryptedTitle !== null && decryptedContent !== null && <NoteExport title={decryptedTitle} content={decryptedContent} encrypted />}
+              {isSecureNote(note) && !decrypting && !decryptError && decryptedTitle !== null && decryptedContent !== null && <NoteExport title={decryptedTitle} content={decryptedContent} delta={parseRichContent(decryptedRich)} images={userId ? { noteId: note.id, userId, privateKey: privateKey ?? null } : null} encrypted />}
               {isSecureNote(note) && userId && privateKey && <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey} knownNote={note} />}
               {userId && note.authorId === userId && !isCollabNote(note) && <NoteHistory key={`history:${note.id}`} note={note} userId={userId} privateKey={privateKey ?? null} onRestored={onClose} />}
+              {userId && !isCollabNote(note) && <NoteOrganizer noteId={note.id} />}
             </div>
           </motion.div>
         </motion.div>

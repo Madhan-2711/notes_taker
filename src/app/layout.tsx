@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthButton } from "../components/AuthButton";
@@ -7,6 +7,9 @@ import { NavBar } from "../components/NavBar";
 import { AuthProvider } from "../contexts/AuthContext";
 import { UserKeysProvider } from "../contexts/UserKeysContext";
 import { NoteDraftProvider } from "../contexts/NoteDraftContext";
+import { NoteMetaProvider } from "../contexts/NoteMetaContext";
+import { ReminderNotifier } from "../components/ReminderNotifier";
+import { AppInstall } from "../components/AppInstall";
 import { isIndexableDeployment, productionSiteUrl } from "../lib/seo";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
@@ -16,6 +19,8 @@ export const metadata: Metadata = {
   title: "Notes Taker | Private Notes & Real-Time Collaboration",
   description: "Capture ideas, organize personal notes, and collaborate in real time. Choose normal notes, encrypted private notes, or secure shared notes in Notes Taker.",
   applicationName: "Notes Taker",
+  appleWebApp: { capable: true, title: "Notes", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
   robots: { index: isIndexableDeployment(), follow: isIndexableDeployment() },
   openGraph: {
     type: "website",
@@ -31,6 +36,10 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#6366f1",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -41,18 +50,24 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col" suppressHydrationWarning>
         <AuthProvider>
           <UserKeysProvider>
+            <NoteMetaProvider>
             <NoteDraftProvider>
             <header className="sticky top-0 z-50 glass border-b border-white/10">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
                 <Logo />
-                <AuthButton />
+                <div className="flex items-center gap-2">
+                  <AppInstall />
+                  <AuthButton />
+                </div>
               </div>
             </header>
             <NavBar />
             <main className="flex-1 flex flex-col">
               {children}
             </main>
+            <ReminderNotifier />
             </NoteDraftProvider>
+            </NoteMetaProvider>
           </UserKeysProvider>
         </AuthProvider>
       </body>

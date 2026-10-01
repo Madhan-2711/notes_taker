@@ -41,22 +41,37 @@ service cloud.firestore {
         && data.updatedAt is number;
     }
 
+    function validRichContent(data) {
+      return !('richContent' in data)
+        || (data.richContent is string && data.richContent.size() <= 100000);
+    }
+
+    function validEncryptedRichContent(data) {
+      return !('encryptedRichContent' in data)
+        || (data.encryptedRichContent is string && data.encryptedRichContent.size() <= 300000);
+    }
+
     function validNoteCreate(data) {
       return validBaseNote(data)
         && data.keys().hasOnly([
           "mode", "title", "content", "encryptedTitle", "encryptedContent",
           "iv", "authorId", "groupIds", "createdAt", "updatedAt",
           "collaboratorIds", "collaboratorRoles", "encryptedKeys",
-          "latestSnapshot", "snapshotIv", "titleIv"
+          "latestSnapshot", "snapshotIv", "titleIv",
+          "richContent", "encryptedRichContent"
         ])
         && (
           (data.mode == "normal"
             && data.keys().hasAll(["title", "content"])
             && data.title is string && data.title.size() <= 100
-            && data.content is string && data.content.size() <= 5000)
+            && data.content is string && data.content.size() <= 5000
+            && validRichContent(data)
+            && !('encryptedRichContent' in data))
           ||
           (data.mode == "secure"
             && data.keys().hasAll(["encryptedTitle", "encryptedContent", "iv", "encryptedKeys"])
+            && validEncryptedRichContent(data)
+            && !('richContent' in data)
             && data.encryptedTitle is string && data.encryptedTitle.size() <= 20000
             && data.encryptedContent is string && data.encryptedContent.size() <= 500000
             && data.iv is string && data.iv.size() <= 1000
@@ -64,6 +79,8 @@ service cloud.firestore {
             && data.authorId in data.encryptedKeys)
           ||
           (data.mode == "collab"
+            && !('richContent' in data)
+            && !('encryptedRichContent' in data)
             && data.keys().hasAll([
               "title", "collaboratorIds", "collaboratorRoles", "encryptedKeys",
               "latestSnapshot", "snapshotIv", "encryptedTitle", "titleIv"
@@ -84,15 +101,21 @@ service cloud.firestore {
       return (
           ((!('mode' in data) || data.mode == "normal")
             && data.title is string && data.title.size() <= 100
-            && data.content is string && data.content.size() <= 5000)
+            && data.content is string && data.content.size() <= 5000
+            && validRichContent(data)
+            && !('encryptedRichContent' in data))
           ||
           (data.mode == "secure"
+            && validEncryptedRichContent(data)
+            && !('richContent' in data)
             && data.encryptedTitle is string && data.encryptedTitle.size() <= 20000
             && data.encryptedContent is string && data.encryptedContent.size() <= 500000
             && data.iv is string && data.iv.size() <= 1000
             && data.encryptedKeys is map)
           ||
           (data.mode == "collab"
+            && !('richContent' in data)
+            && !('encryptedRichContent' in data)
             && data.title is string && data.title.size() <= 100
             && (!('encryptedTitle' in data)
               || (data.encryptedTitle is string && data.encryptedTitle.size() <= 20000))
@@ -149,7 +172,8 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "title", "content", "encryptedTitle", "encryptedContent", "iv",
               "groupIds", "updatedAt", "collaboratorIds", "collaboratorRoles",
-              "encryptedKeys", "latestSnapshot", "snapshotIv", "titleIv", "deletedAt"
+              "encryptedKeys", "latestSnapshot", "snapshotIv", "titleIv", "deletedAt",
+              "richContent", "encryptedRichContent"
             ]))
           ||
           (collaboratorCanEdit(resource)
@@ -240,8 +264,11 @@ service cloud.firestore {
           && request.resource.data.createdAt is number
           && request.resource.data.keys().hasOnly([
             "mode", "editorId", "createdAt", "title", "content", "encryptedTitle",
-            "encryptedContent", "iv", "titleIv", "latestSnapshot", "snapshotIv"
+            "encryptedContent", "iv", "titleIv", "latestSnapshot", "snapshotIv",
+            "richContent", "encryptedRichContent"
           ])
+          && validRichContent(request.resource.data)
+          && validEncryptedRichContent(request.resource.data)
           && (
             (normalParent()
               && request.resource.data.mode == "normal"
@@ -333,6 +360,18 @@ service cloud.firestore {
           && request.resource.data.pinnedIds is list
           && request.resource.data.pinnedIds.size() <= 100;
         allow delete: if signedIn() && request.auth.uid == uid;
+      }
+
+      // Personal tags, archive flag and reminder for one note.
+      match /noteMeta/{noteId} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(["tags", "archived", "reminderAt", "updatedAt"])
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 10
+          && request.resource.data.archived is bool
+          && (request.resource.data.reminderAt == null || request.resource.data.reminderAt is number)
+          && request.resource.data.updatedAt is number;
       }
     }
 

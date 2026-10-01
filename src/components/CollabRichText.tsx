@@ -9,24 +9,7 @@ import type * as Y from "yjs";
 import type Quill from "quill";
 import type QuillCursors from "quill-cursors";
 import type { PresenceUser } from "../hooks/usePresence";
-
-export const FONT_SIZES = ["12px", "14px", "16px", "24px", "32px", "48px"];
-
-// Only these formats are accepted, including from collaborators' updates, so
-// links, embeds and raw HTML can never enter the shared document.
-const FORMATS = ["size", "header", "bold", "italic", "underline", "strike", "color", "background", "list", "align"];
-
-const TOOLBAR = [
-  [{ size: ["12px", "14px", "16px", false, "24px", "32px", "48px"] }],
-  [{ header: [1, 2, 3, false] }],
-  ["bold", "italic", "underline", "strike"],
-  [{ color: [] }, { background: [] }],
-  [{ list: "ordered" }, { list: "bullet" }],
-  [{ align: [] }],
-  ["clean"],
-];
-
-let registered = false;
+import { loadQuill, RICH_FORMATS, RICH_TOOLBAR } from "../lib/quillSetup";
 
 interface CollabRichTextProps {
   text: Y.Text;
@@ -57,29 +40,19 @@ export function CollabRichText({ text, editable, toolbarContainer, remoteUsers, 
     let dispose = () => {};
 
     void (async () => {
-      const [{ default: QuillClass }, { QuillBinding }, { default: Cursors }] = await Promise.all([
-        import("quill"),
-        import("y-quill"),
-        import("quill-cursors/core"),
-      ]);
+      const [QuillClass, { QuillBinding }] = await Promise.all([loadQuill(), import("y-quill")]);
       if (disposed) return;
-
-      if (!registered) {
-        const sizeStyle = QuillClass.import("attributors/style/size") as { whitelist: string[] };
-        sizeStyle.whitelist = FONT_SIZES;
-        QuillClass.register(sizeStyle as never, true);
-        QuillClass.register("modules/cursors", Cursors);
-        registered = true;
-      }
 
       const mount = document.createElement("div");
       host.appendChild(mount);
       const quill = new QuillClass(mount, {
         theme: "snow",
-        formats: FORMATS,
+        // Only these formats are accepted, including from collaborators' updates, so
+        // links, embeds and raw HTML can never enter the shared document.
+        formats: RICH_FORMATS,
         placeholder: "Start collaborating...",
         modules: {
-          toolbar: TOOLBAR,
+          toolbar: RICH_TOOLBAR,
           cursors: { transformOnTextChange: true, hideDelayMs: 1500 },
           history: { userOnly: true },
         },

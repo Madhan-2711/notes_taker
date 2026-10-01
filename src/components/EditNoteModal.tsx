@@ -15,14 +15,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, FolderOpen, ImagePlus, Lock, Users, Loader2 } from "lucide-react";
 import { setNoteGroupIds } from "../lib/groupsService";
 import { NoteAttachments } from "./NoteAttachments";
-import { InlineNoteContent } from "./InlineNoteContent";
-import { applyVisibleEdit, hideImageTokens, imageToken, visibleToContentIndex } from "../lib/inlineImages";
 import type { Attachment } from "../lib/services/attachments";
+import { RichNoteEditor, type RichNoteEditorHandle } from "./RichNoteEditor";
+import { MAX_PLAIN_TEXT, MAX_RICH_JSON, deltaFromPlain, parseRichContent, serializeDelta, type RichDelta } from "../lib/richText";
 
 interface EditNoteModalProps {
   note: Note | null;
   onClose: () => void;
-  onSave: (id: string, title: string, content: string) => Promise<void>;
+  onSave: (id: string, title: string, content: string, richContent: string) => Promise<void>;
   groups?: Group[];
   /** Current user's ID for decryption */
   userId?: string;
@@ -40,6 +40,8 @@ export function EditNoteModal({
 }: EditNoteModalProps) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [delta, setDelta] = useState<RichDelta | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,20 +50,18 @@ export function EditNoteModal({
   const [decryptedForNote, setDecryptedForNote] = useState<string | null>(null);
   const attachmentsRef = useRef<HTMLDivElement>(null);
   const attachmentPickerRef = useRef<HTMLInputElement>(null);
-  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichNoteEditorHandle>(null);
 
-  const visibleContent = hideImageTokens(content);
+  const load = (noteId: string, nextTitle: string, plain: string, rich: string | null | undefined) => {
+    setTitle(nextTitle);
+    setContent(plain);
+    setDelta(parseRichContent(rich) ?? deltaFromPlain(plain));
+    setLoadedFor(noteId);
+  };
 
   const insertImage = (file: Attachment) => {
-    const token = `\n${imageToken(file)}\n`;
-    const textarea = contentRef.current;
-    const visiblePosition = textarea?.selectionStart ?? visibleContent.length;
-    const position = visibleToContentIndex(content, visiblePosition);
-    const updated = `${content.slice(0, position)}${token}${content.slice(position)}`;
-    if (updated.length > 5000) { setError("Shorten the note before inserting another image."); return; }
-    setContent(updated);
-    const caret = visiblePosition + 3;
-    requestAnimationFrame(() => { textarea?.focus(); textarea?.setSelectionRange(caret, caret); });
+    const id = file.path.split("/").pop();
+    if (id) editorRef.current?.insertImage({ id, alt: file.name });
   };
 
   useEffect(() => {
@@ -76,19 +76,19 @@ export function EditNoteModal({
     setDecryptedForNote(null);
     setTitle("");
     setContent("");
+    setDelta(null);
+    setLoadedFor(null);
     setDecrypting(false);
 
     if (isNormalNote(note)) {
-      setTitle(note.title);
-      setContent(note.content);
+      load(note.id, note.title, note.content, note.richContent);
     } else if (isSecureNote(note) && userId && privateKey) {
       // Decrypt the note for editing
       setDecrypting(true);
       readSecureNote(note.id, userId, privateKey)
-        .then(({ title: t, content: c }) => {
+        .then(({ title: t, content: c, richContent }) => {
           if (!cancelled) {
-            setTitle(t);
-            setContent(c);
+            load(note.id, t, c, richContent);
             setDecryptedForNote(note.id);
           }
         })
@@ -119,13 +119,13 @@ export function EditNoteModal({
 
     try {
       noteSchema.parse({ title, content });
+      const richContent = serializeDelta(delta ?? deltaFromPlain(content));
+      if (richContent.length > MAX_RICH_JSON) throw new Error("This note has too much formatting to save. Remove some formatting or split the note.");
 
       if (isSecureNote(note) && userId && privateKey) {
-        // Re-encrypt and save
-        await updateSecureNote(note.id, userId, title, content, privateKey);
+        await updateSecureNote(note.id, userId, title, content, privateKey, richContent);
       } else {
-        // Normal save
-        await onSave(note.id, title, content);
+        await onSave(note.id, title, content, richContent);
       }
 
       // Update group membership separately
@@ -235,15 +235,18 @@ export function EditNoteModal({
                   <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
                     Content
                   </label>
-                  <textarea
-                    ref={contentRef}
-                    value={visibleContent}
-                    onChange={(e) => setContent(applyVisibleEdit(content, visibleContent, e.target.value))}
-                    maxLength={5000 - (content.length - visibleContent.length)}
-                    className="min-h-[38dvh] w-full resize-y rounded-xl border border-border/70 bg-slate-50/40 p-4 text-base leading-7 outline-none transition-colors placeholder:text-foreground/25 focus:border-primary focus:bg-white sm:min-h-[48dvh] sm:p-5"
-                  />
-                  <p className="mt-1 text-right text-xs text-foreground/40">{content.length.toLocaleString()} / 5,000 characters</p>
-                  {content.includes("(attachment:") && userId && <details className="mt-3 rounded-xl border border-slate-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Preview note with images</summary><InlineNoteContent content={content} noteId={note.id} userId={userId} privateKey={privateKey ?? null} /></details>}
+                  {delta && loadedFor === note.id && (
+                    <RichNoteEditor
+                      key={note.id}
+                      initial={delta}
+                      label="Note content"
+                      placeholder="Start writing your thoughts..."
+                      images={userId ? { noteId: note.id, userId, privateKey: privateKey ?? null } : null}
+                      handleRef={editorRef}
+                      onChange={(nextDelta, plain) => { setDelta(nextDelta); setContent(plain); }}
+                    />
+                  )}
+                  <p className={`mt-1 text-right text-xs ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-600" : "text-foreground/40"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>
                 </div>
 
                 {groups.length > 0 && (
@@ -281,7 +284,7 @@ export function EditNoteModal({
 
                 {userId && (isNormalNote(note) || (isSecureNote(note) && privateKey)) && (
                   <div ref={attachmentsRef} className="scroll-mt-4">
-                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey ?? null} pickerRef={attachmentPickerRef} knownNote={note} onInsertImage={insertImage} />
+                    <NoteAttachments key={`${userId}:${note.id}`} noteId={note.id} userId={userId} privateKey={privateKey ?? null} pickerRef={attachmentPickerRef} knownNote={note} onInsertImage={insertImage} onInsertText={(text) => editorRef.current?.insertText(text)} />
                     <p className="text-xs leading-5 text-foreground/50">Files upload immediately, even if you close this editor without saving text changes.</p>
                   </div>
                 )}

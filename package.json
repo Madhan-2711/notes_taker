@@ -7,12 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run tests/textDelta.test.ts tests/crypto.keys.test.ts tests/drawing.test.ts tests/attachments.test.ts tests/noteNavigation.test.ts tests/inlineImages.test.ts tests/floatingImages.test.ts tests/seo.test.ts",
+    "test": "vitest run tests/crypto.keys.test.ts tests/drawing.test.ts tests/attachments.test.ts tests/noteNavigation.test.ts tests/inlineImages.test.ts tests/floatingImages.test.ts tests/richText.test.ts tests/richExport.test.ts tests/seo.test.ts",
     "test:storage": "firebase emulators:exec --project demo-attachments --only firestore,storage \"vitest run tests/storage.rules.test.ts\"",
     "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/firestore.rules.test.ts\""
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "docx": "^9.8.1",
     "firebase": "^12.12.0",
     "framer-motion": "^12.38.0",
     "idb-keyval": "^6.2.4",

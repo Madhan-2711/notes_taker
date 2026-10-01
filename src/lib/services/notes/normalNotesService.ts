@@ -29,12 +29,14 @@ export async function createNormalNote(
   userId: string,
   title: string,
   content: string,
-  groupIds: string[] = []
+  groupIds: string[] = [],
+  richContent?: string
 ): Promise<string> {
   const newNote = {
     mode: "normal" as const,
     title,
     content,
+    ...(richContent ? { richContent } : {}),
     groupIds,
     authorId: userId,
     createdAt: Date.now(),
@@ -53,21 +55,23 @@ export async function createNormalNote(
 
 // ── Update ────────────────────────────────────────────────────────────────────
 
-/** Updates a normal note's title and content. */
+/** Updates a normal note's title and content. `richContent: null` drops formatting. */
 export async function updateNormalNote(
   noteId: string,
   title: string,
-  content: string
+  content: string,
+  richContent: string | null = null
 ): Promise<void> {
   const ref = doc(db, "notes", noteId);
   const current = await getDoc(ref);
   if (!current.exists()) throw new Error("Note not found.");
   const uid = auth.currentUser?.uid;
   if (!uid || current.data().authorId !== uid) throw new Error("Only the owner can edit this note.");
-  if (current.data().title === title && current.data().content === content) return;
+  const data = current.data();
+  if (data.title === title && data.content === content && (data.richContent ?? null) === richContent) return;
   const batch = writeBatch(db);
-  addRevisionToBatch(batch, noteId, current.data(), uid);
-  batch.update(ref, { title, content, updatedAt: Date.now() });
+  addRevisionToBatch(batch, noteId, data, uid);
+  batch.update(ref, { title, content, richContent: richContent ?? deleteField(), updatedAt: Date.now() });
   await batch.commit();
 }
 

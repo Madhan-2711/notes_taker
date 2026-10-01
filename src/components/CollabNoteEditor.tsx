@@ -12,10 +12,12 @@ import { NoteExport } from "./NoteExport";
 import { NoteAttachments } from "./NoteAttachments";
 import { NoteComments } from "./NoteComments";
 import { CollabHistory } from "./CollabHistory";
+import { NoteOrganizer } from "./NoteOrganizer";
 import type { Attachment } from "../lib/services/attachments";
 import { CollabRichText } from "./CollabRichText";
 import { FloatingImageLayer } from "./FloatingImageLayer";
-import { DEFAULT_IMAGE_WIDTH, clampImage, migrateLegacyImageTokens } from "../lib/floatingImages";
+import { DEFAULT_IMAGE_WIDTH, clampImage, isValidFloatingImage, migrateLegacyImageTokens, type FloatingImage } from "../lib/floatingImages";
+import { sanitizeDelta, type RichDelta, type RichOp } from "../lib/richText";
 import { DrawingCanvas } from "./DrawingCanvas";
 import { DrawingToolbar } from "./DrawingToolbar";
 import {
@@ -26,6 +28,16 @@ import {
   isPenTool,
   type DrawTool,
 } from "../lib/drawing";
+
+/** Shared text followed by the board's pictures, top to bottom, for exports. */
+function collabExportDelta(text: Y.Text, images: Y.Map<FloatingImage> | null): RichDelta {
+  const placed: FloatingImage[] = [];
+  images?.forEach((image) => { if (isValidFloatingImage(image)) placed.push(image); });
+  const pictures: RichOp[] = placed
+    .sort((a, b) => a.y - b.y)
+    .map((image) => ({ insert: { noteImage: { id: image.id, alt: image.alt } } }));
+  return sanitizeDelta({ ops: [...(text.toDelta() as RichOp[]), ...pictures] });
+}
 
 interface CollabNoteEditorProps {
   noteId: string;
@@ -296,11 +308,12 @@ export function CollabNoteEditor({
 
       <details className="mb-4 rounded-2xl border border-slate-200 bg-white px-4">
         <summary className="cursor-pointer py-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-indigo-500">Files & export</summary>
-        <NoteExport title={title} content={plainText} encrypted />
-        {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} onInsertImage={canEdit ? insertImage : undefined} />}
+        <NoteExport title={title} content={plainText} delta={text ? collabExportDelta(text, images) : null} images={{ noteId, userId, privateKey }} encrypted />
+        {privateKey && <NoteAttachments key={`${userId}:${noteId}`} noteId={noteId} userId={userId} privateKey={privateKey} onInsertImage={canEdit ? insertImage : undefined} onInsertText={canEdit && text ? (spoken) => text.insert(text.length, `\n${spoken}`) : undefined} />}
       </details>
       <NoteComments noteId={noteId} userId={userId} userName={displayName} privateKey={privateKey} />
       {canCompact && <CollabHistory noteId={noteId} userId={userId} privateKey={privateKey} />}
+      <div className="mb-4"><NoteOrganizer noteId={noteId} /></div>
 
       <div
         className={fullscreen ? "fixed inset-0 z-[60] overflow-y-auto px-3 py-3 sm:px-6" : ""}

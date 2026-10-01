@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import Image from "next/image";
-import { Download, Eye, ImagePlus, Paperclip, RefreshCw, Trash2, Upload, X } from "lucide-react";
-import { ATTACHMENT_ACCEPT } from "../lib/attachmentCrypto";
+import { Download, Eye, ImagePlus, Paperclip, Play, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { ATTACHMENT_ACCEPT, AUDIO_EXT, audioMimeType } from "../lib/attachmentCrypto";
+import { VoiceRecorder } from "./VoiceRecorder";
 import { attachmentAccess, downloadAttachment, listAttachments, removeAttachment, uploadAttachment, type Attachment } from "../lib/services/attachments";
 import { downloadBlob } from "../lib/noteExport";
 import type { Note } from "../lib/validations";
@@ -22,9 +23,11 @@ async function withLoadingTimeout<T>(task: Promise<T>): Promise<T> {
   }
 }
 
-export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNote, onInsertImage }: {
+export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNote, onInsertImage, onInsertText }: {
   noteId: string; userId: string; privateKey: CryptoKey | null; pickerRef?: RefObject<HTMLInputElement | null>; knownNote?: Note;
   onInsertImage?: (file: Attachment) => void;
+  /** Receives an on-device voice transcript to add to the note text. */
+  onInsertText?: (text: string) => void;
 }) {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [nextPage, setNextPage] = useState<string>();
@@ -35,7 +38,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
   const [message, setMessage] = useState("");
   const [access, setAccess] = useState<{ key: CryptoKey | null; owner: boolean; editor: boolean }>();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ path: string; url: string; name: string } | null>(null);
+  const [preview, setPreview] = useState<{ path: string; url: string; name: string; audio: boolean } | null>(null);
   const previewUrl = useRef<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const operation = useRef(false);
@@ -87,7 +90,9 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
       const uploaded = await uploadAttachment(noteId, userId, currentAccess.key, file, (value) => { if (mounted.current) setProgress(value); }, cancellation.signal);
       if (mounted.current) {
         if (onInsertImage && isImage(uploaded.name)) onInsertImage(uploaded);
-        setMessage(isImage(uploaded.name) && onInsertImage ? "Image uploaded and inserted in the note. Save text changes to keep its position." : currentAccess.key ? "File encrypted and uploaded." : "File added to normal note.");
+        setMessage(isImage(uploaded.name) && onInsertImage ? "Image uploaded and inserted in the note. Save text changes to keep its position."
+          : AUDIO_EXT.test(uploaded.name) ? (currentAccess.key ? "Voice note encrypted and saved." : "Voice note saved.")
+          : currentAccess.key ? "File encrypted and uploaded." : "File added to normal note.");
         await refresh();
       }
     } catch (caught) {
@@ -118,11 +123,13 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
         if (mounted.current && operationType === "preview") {
           if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
           const extension = file.name.toLowerCase().split(".").pop();
-          const mime = extension === "jpg" || extension === "jpeg" ? "image/jpeg"
+          const audio = AUDIO_EXT.test(file.name);
+          const mime = audio ? audioMimeType(file.name)
+            : extension === "jpg" || extension === "jpeg" ? "image/jpeg"
             : extension === "gif" ? "image/gif" : extension === "webp" ? "image/webp" : "image/png";
           const url = URL.createObjectURL(new Blob([blob], { type: mime }));
           previewUrl.current = url;
-          setPreview({ path: file.path, url, name: file.name });
+          setPreview({ path: file.path, url, name: file.name, audio });
         } else if (mounted.current) {
           downloadBlob(blob, file.name);
           setMessage(currentAccess.key ? "Decrypted file ready to download." : "File ready to download.");
@@ -153,6 +160,7 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
       <input ref={(node) => { input.current = node; if (pickerRef) pickerRef.current = node; }} type="file" className="sr-only" tabIndex={-1} aria-label="Choose attachment" accept={ATTACHMENT_ACCEPT} disabled={busy || !access?.editor} onChange={(event) => void upload(event.target.files?.[0])} />
       <button type="button" className={buttonStyle} disabled={busy || !access?.editor} onClick={() => input.current?.click()}><Upload size={16} /> Add image or file</button>
       <p className="mt-2 text-xs text-slate-600">{access?.editor ? "Or drop an image, PDF, text or Office document here" : error ? "Upload access could not be checked. Use refresh to retry." : "Checking upload access…"}</p>
+      {access?.editor && <VoiceRecorder disabled={busy} onSave={upload} onInsertText={onInsertText} />}
     </div>}
     {progress !== null && <div className="mt-4 flex items-center gap-3"><progress className="h-2 min-w-0 flex-1 accent-indigo-500" value={progress} max={100} aria-label="Upload progress" /><span className="text-xs">{progress}%</span>{progress < 75 ? <button type="button" className={buttonStyle} onClick={() => controller.current?.abort()} aria-label="Cancel upload"><X size={16} /></button> : <span className="text-xs text-slate-600">Saving…</span>}</div>}
     <div role="status" className="mt-3 text-sm text-slate-600">{loading ? "Loading attachments…" : message || (!files.length && !error ? "No attachments yet." : "")}</div>
@@ -160,13 +168,16 @@ export function NoteAttachments({ noteId, userId, privateKey, pickerRef, knownNo
     <ul className="mt-3 space-y-2">{files.map((file) => <li key={file.path} className="rounded-xl border border-slate-100 p-3">
       <div className="flex flex-wrap items-center gap-2"><div className="min-w-0 flex-1 basis-36"><p className="break-all text-sm font-semibold">{file.name}</p><p className="text-xs text-slate-500">{(file.size / 1024).toFixed(0)} KB · {access?.key ? "encrypted" : "normal note"}</p></div>
         {isImage(file.name) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Preview ${file.name}`} onClick={() => void action(file, "preview")}><Eye size={16} /> <span className="hidden sm:inline">Preview</span></button>}
+        {AUDIO_EXT.test(file.name) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Play ${file.name}`} onClick={() => void action(file, "preview")}><Play size={16} /> <span className="hidden sm:inline">Play</span></button>}
         {isImage(file.name) && access?.editor && onInsertImage && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Insert ${file.name} into note`} onClick={() => onInsertImage(file)}><ImagePlus size={16} /> <span className="hidden sm:inline">Insert</span></button>}
         <button type="button" className={buttonStyle} disabled={busy} aria-label={`Download ${file.name}`} onClick={() => void action(file, "download")}><Download size={16} /></button>
         {access?.editor && (access.owner || file.uploader === userId) && <button type="button" className={buttonStyle} disabled={busy} aria-label={`Delete ${file.name}`} onClick={() => setConfirmDelete(file.path)}><Trash2 size={16} /></button>}
       </div>
       {preview?.path === file.path && <figure className="mt-3 overflow-hidden rounded-xl border bg-slate-50 p-2">
-        <Image src={preview.url} alt={preview.name} width={960} height={640} unoptimized className="mx-auto max-h-[55dvh] w-auto max-w-full object-contain" />
-        <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-600"><span className="min-w-0 truncate">{preview.name}</span><button type="button" className={buttonStyle} onClick={closePreview} aria-label="Close image preview"><X size={16} /></button></figcaption>
+        {preview.audio
+          ? <audio controls autoPlay src={preview.url} className="w-full" aria-label={preview.name} />
+          : <Image src={preview.url} alt={preview.name} width={960} height={640} unoptimized className="mx-auto max-h-[55dvh] w-auto max-w-full object-contain" />}
+        <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-600"><span className="min-w-0 truncate">{preview.name}</span><button type="button" className={buttonStyle} onClick={closePreview} aria-label={preview.audio ? "Close player" : "Close image preview"}><X size={16} /></button></figcaption>
       </figure>}
       {confirmDelete === file.path && <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><p>Delete this file for everyone?</p><button type="button" className={buttonStyle} disabled={busy} onClick={() => void action(file, "delete")}>Delete permanently</button><button type="button" className={buttonStyle} onClick={() => setConfirmDelete(null)}>Keep file</button></div>}
     </li>)}</ul>

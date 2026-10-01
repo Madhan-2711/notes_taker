@@ -13,6 +13,7 @@ import {
   getDoc,
   doc,
   writeBatch,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { encryptData } from "../crypto/encrypt";
@@ -35,7 +36,8 @@ export async function createSecureNote(
   title: string,
   content: string,
   groupIds: string[],
-  publicKey: CryptoKey
+  publicKey: CryptoKey,
+  richContent?: string
 ): Promise<string> {
   // Generate a per-note AES key
   const noteKey = await generateAESKey();
@@ -43,6 +45,7 @@ export async function createSecureNote(
   // Encrypt title and content
   const encryptedTitle = await encryptData(title, noteKey);
   const encryptedContent = await encryptData(content, noteKey);
+  const encryptedRich = richContent ? await encryptData(richContent, noteKey) : null;
 
   // Wrap the AES key with the author's public key
   const wrappedKey = await encryptKeyForUser(noteKey, publicKey);
@@ -51,10 +54,12 @@ export async function createSecureNote(
     mode: "secure" as const,
     encryptedTitle: encryptedTitle.ciphertext,
     encryptedContent: encryptedContent.ciphertext,
-    // Store both IVs as a JSON object
+    ...(encryptedRich ? { encryptedRichContent: encryptedRich.ciphertext } : {}),
+    // Store every field's IV together as a JSON object
     iv: JSON.stringify({
       title: encryptedTitle.iv,
       content: encryptedContent.iv,
+      ...(encryptedRich ? { rich: encryptedRich.iv } : {}),
     }),
     encryptedKeys: { [userId]: wrappedKey },
     groupIds,
@@ -83,7 +88,7 @@ export async function readSecureNote(
   noteId: string,
   userId: string,
   privateKey: CryptoKey
-): Promise<{ title: string; content: string }> {
+): Promise<{ title: string; content: string; richContent: string | null }> {
   const ref = doc(db, "notes", noteId);
   const snap = await getDoc(ref);
 
@@ -107,8 +112,11 @@ export async function readSecureNote(
   // Decrypt title and content
   const title = await decryptData(data.encryptedTitle, ivs.title, noteKey);
   const content = await decryptData(data.encryptedContent, ivs.content, noteKey);
+  const richContent = typeof data.encryptedRichContent === "string" && typeof ivs.rich === "string"
+    ? await decryptData(data.encryptedRichContent, ivs.rich, noteKey)
+    : null;
 
-  return { title, content };
+  return { title, content, richContent };
 }
 
 /**
@@ -121,7 +129,8 @@ export async function updateSecureNote(
   userId: string,
   title: string,
   content: string,
-  privateKey: CryptoKey
+  privateKey: CryptoKey,
+  richContent: string | null = null
 ): Promise<void> {
   const ref = doc(db, "notes", noteId);
   const snap = await getDoc(ref);
@@ -143,15 +152,18 @@ export async function updateSecureNote(
   // Re-encrypt with new content
   const encryptedTitle = await encryptData(title, noteKey);
   const encryptedContent = await encryptData(content, noteKey);
+  const encryptedRich = richContent ? await encryptData(richContent, noteKey) : null;
 
   const batch = writeBatch(db);
   addRevisionToBatch(batch, noteId, data, userId);
   batch.update(ref, {
     encryptedTitle: encryptedTitle.ciphertext,
     encryptedContent: encryptedContent.ciphertext,
+    encryptedRichContent: encryptedRich ? encryptedRich.ciphertext : deleteField(),
     iv: JSON.stringify({
       title: encryptedTitle.iv,
       content: encryptedContent.iv,
+      ...(encryptedRich ? { rich: encryptedRich.iv } : {}),
     }),
     updatedAt: Date.now(),
   });

@@ -180,3 +180,10 @@ export async function deleteAllAttachments(noteId: string) {
     if (snap.size < 100) break;
   }
 }
+
+/** Fetches and decrypts one image attachment of a note, ready for an object URL. */
+export async function loadAttachmentImage(noteId: string, userId: string, privateKey: CryptoKey | null, id: string, alt: string): Promise<Blob> {
+  const { key } = await attachmentAccess(noteId, userId, privateKey);
+  const blob = await downloadAttachment({ path: `notes/${noteId}/attachments/${id}`, name: alt, size: 0, uploader: "" }, key);
+  return new Blob([blob], { type: "image/webp" });
+}

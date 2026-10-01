@@ -12,6 +12,9 @@ import { createSecureNote, updateSecureNote } from "../../lib/services/notes/sec
 import { appendImagesToCollabNote, createCollabNote } from "../../lib/services/notes/collaborativeNotesService";
 import { attachmentAccess, uploadAttachment } from "../../lib/services/attachments";
 import { imageToken } from "../../lib/inlineImages";
+import { MAX_PLAIN_TEXT, MAX_RICH_JSON, deltaFromPlain, parseRichContent, plainFromDelta, serializeDelta, type RichOp } from "../../lib/richText";
+import { NOTE_TEMPLATES, type NoteTemplate } from "../../lib/noteTemplates";
+import { RichNoteEditor } from "../../components/RichNoteEditor";
 import { ATTACHMENT_ACCEPT, IMAGE_EXT, MAX_INLINE_PLAINTEXT, validateAttachment } from "../../lib/attachmentCrypto";
 import { getFriends } from "../../lib/services/social/friendsService";
 import { sendCollabInvite } from "../../lib/services/social/collaborationService";
@@ -34,10 +37,21 @@ export default function WritePage() {
   } = useUserKeys();
 
   const { draft, update: updateDraft, clear: clearDraft } = useNoteDraft(user?.uid);
-  const { mode: noteMode, title, content } = draft;
+  const { mode: noteMode, title, content, rich } = draft;
   const setNoteMode = (mode: NoteMode) => updateDraft({ mode });
   const setTitle = (value: string) => updateDraft({ title: value });
-  const setContent = (value: string) => updateDraft({ content: value });
+  const [editorVersion, setEditorVersion] = useState(0);
+  const draftDelta = parseRichContent(rich) ?? deltaFromPlain(content);
+
+  const applyTemplate = (template: NoteTemplate) => {
+    if (content.trim() && !window.confirm(`Replace what you've written with the "${template.label}" template?`)) return;
+    updateDraft({
+      title: title.trim() ? title : template.title,
+      content: plainFromDelta(template.delta),
+      rich: serializeDelta(template.delta),
+    });
+    setEditorVersion((version) => version + 1);
+  };
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +69,7 @@ export default function WritePage() {
   const completedFiles = useRef(new Set<number>());
   const completedInvites = useRef(new Set<string>());
   const uploadedImageTokens = useRef<string[]>([]);
+  const uploadedImages = useRef<RichOp[]>([]);
   const imageTokensApplied = useRef(false);
   const pickerRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +132,8 @@ export default function WritePage() {
     setSaving(true);
     try {
       const validData = noteSchema.parse({ title, content });
+      const richJson = serializeDelta(draftDelta);
+      if (richJson.length > MAX_RICH_JSON) throw new Error("This note has too much formatting to save. Remove some formatting or split the note.");
       if (noteMode !== "normal" && (!hasKeys || !publicKey)) throw new Error("Encryption keys are not ready yet. Set up or unlock your vault.");
       if (noteMode !== "normal" && (files.length || (noteMode === "collab" && selectedFriends.length)) && !privateKey) {
         throw new Error("Unlock your vault before adding files or collaborators to an encrypted note.");
@@ -127,13 +144,13 @@ export default function WritePage() {
         setSaveStage("Creating note…");
 
         if (noteMode === "normal") {
-          newNoteId = await createNormalNote(user.uid, validData.title, validData.content, selectedGroupIds);
+          newNoteId = await createNormalNote(user.uid, validData.title, validData.content, selectedGroupIds, richJson);
         } else if (noteMode === "secure") {
           if (!publicKey) throw new Error("Encryption keys are not ready yet.");
-          newNoteId = await createSecureNote(user.uid, validData.title, validData.content, selectedGroupIds, publicKey);
+          newNoteId = await createSecureNote(user.uid, validData.title, validData.content, selectedGroupIds, publicKey, richJson);
         } else if (noteMode === "collab") {
           if (!publicKey) throw new Error("Encryption keys are not ready yet.");
-          newNoteId = await createCollabNote(user.uid, validData.title, validData.content, selectedGroupIds, publicKey);
+          newNoteId = await createCollabNote(user.uid, validData.title, validData.content, selectedGroupIds, publicKey, draftDelta);
         }
         createdNoteId.current = newNoteId;
         setSavedNoteId(newNoteId);
@@ -147,17 +164,21 @@ export default function WritePage() {
           if (completedFiles.current.has(index)) continue;
           setSaveStage(`Adding file ${index + 1} of ${files.length}…`);
           const uploaded = await uploadAttachment(newNoteId, user.uid, key, file, () => {}, new AbortController().signal);
-          if (IMAGE_EXT.test(uploaded.name)) uploadedImageTokens.current.push(imageToken(uploaded));
+          if (IMAGE_EXT.test(uploaded.name)) {
+            uploadedImageTokens.current.push(imageToken(uploaded));
+            const id = uploaded.path.split("/").pop();
+            if (id) uploadedImages.current.push({ insert: { noteImage: { id, alt: uploaded.name } } });
+          }
           completedFiles.current.add(index);
         }
         if (uploadedImageTokens.current.length && !imageTokensApplied.current) {
           setSaveStage("Placing images in note…");
           if (noteMode === "collab" && privateKey) await appendImagesToCollabNote(newNoteId, user.uid, privateKey, uploadedImageTokens.current);
           else {
-            const body = `${validData.content}\n\n${uploadedImageTokens.current.join("\n\n")}`;
-            if (body.length > 5000) throw new Error("The note is too long to place its images. Shorten the text and retry; your uploaded files are safe.");
-            if (noteMode === "normal") await updateNormalNote(newNoteId, validData.title, body);
-            else if (privateKey) await updateSecureNote(newNoteId, user.uid, validData.title, body, privateKey);
+            const withImages = serializeDelta({ ops: [...draftDelta.ops, ...uploadedImages.current] });
+            if (withImages.length > MAX_RICH_JSON) throw new Error("The note is too long to place its images. Shorten the text and retry; your uploaded files are safe.");
+            if (noteMode === "normal") await updateNormalNote(newNoteId, validData.title, validData.content, withImages);
+            else if (privateKey) await updateSecureNote(newNoteId, user.uid, validData.title, validData.content, privateKey, withImages);
           }
           imageTokensApplied.current = true;
         }
@@ -262,17 +283,36 @@ export default function WritePage() {
           />
         </div>
 
-        <div>
+        <section aria-label="Templates" className={saving || savedNoteId ? "pointer-events-none opacity-60" : ""}>
+          <h2 className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2">Start from a template</h2>
+          <div className="flex flex-wrap gap-2">
+            {NOTE_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => applyTemplate(template)}
+                title={template.description}
+                className="min-h-11 rounded-xl border border-border/70 bg-white px-3 text-sm font-semibold text-slate-700 transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-indigo-600"
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <div className="[--rich-toolbar-top:4rem] sm:[--rich-toolbar-top:5rem]">
           <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
             Content
           </label>
-          <textarea
+          <RichNoteEditor
+            key={`${user.uid}:${editorVersion}`}
+            initial={draftDelta}
+            readOnly={Boolean(savedNoteId)}
+            label="Note content"
             placeholder="Start writing your thoughts..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            disabled={Boolean(savedNoteId)}
-            className="w-full bg-transparent min-h-[220px] resize-none focus:outline-none placeholder:text-foreground/25 leading-relaxed"
+            onChange={(delta, plain) => updateDraft({ rich: serializeDelta(delta), content: plain })}
           />
+          <p className={`mt-1 text-right text-xs ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-600" : "text-foreground/40"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>
         </div>
 
         <section className="rounded-2xl border border-border/70 bg-white/70 p-4 sm:p-5" aria-label="Files and images">

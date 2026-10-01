@@ -431,3 +431,42 @@ describe("friendship integrity", () => {
     await assertSucceeds(batch.commit());
   });
 });
+
+describe("rich content and personal note settings", () => {
+  const normalNote = { mode: "normal", title: "T", content: "Hi", authorId: "alice", groupIds: [], createdAt: 1, updatedAt: 1 };
+
+  test("normal notes accept formatted content but not encrypted rich fields", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertSucceeds(setDoc(doc(alice, "notes", "n1"), { ...normalNote, richContent: '{"ops":[{"insert":"Hi\n"}]}' }));
+    await assertFails(setDoc(doc(alice, "notes", "n2"), { ...normalNote, encryptedRichContent: "x" }));
+    await assertFails(setDoc(doc(alice, "notes", "n3"), { ...normalNote, richContent: "x".repeat(100001) }));
+    await assertSucceeds(updateDoc(doc(alice, "notes", "n1"), { richContent: deleteField(), updatedAt: 2 }));
+  });
+
+  test("encrypted notes accept only the encrypted formatted field", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const secure = { mode: "secure", encryptedTitle: "t", encryptedContent: "c", iv: "{}", encryptedKeys: { alice: "k" }, authorId: "alice", groupIds: [], createdAt: 1, updatedAt: 1 };
+    await assertSucceeds(setDoc(doc(alice, "notes", "s1"), { ...secure, encryptedRichContent: "ciphertext" }));
+    await assertFails(setDoc(doc(alice, "notes", "s2"), { ...secure, richContent: "plaintext formatting" }));
+  });
+
+  test("collaborative notes cannot carry rich-content fields", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "notes", "note-1"), { encryptedTitle: "title", titleIv: "nonce" });
+    });
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertFails(updateDoc(doc(alice, "notes", "note-1"), { richContent: "x", updatedAt: 3 }));
+  });
+
+  test("tags, archive and reminders are private and well-formed", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const meta = { tags: ["work"], archived: false, reminderAt: 1_900_000_000_000, updatedAt: 1 };
+    await assertSucceeds(setDoc(doc(alice, "users", "alice", "noteMeta", "note-1"), meta));
+    await assertSucceeds(setDoc(doc(alice, "users", "alice", "noteMeta", "note-2"), { ...meta, reminderAt: null }));
+    await assertFails(getDoc(doc(bob, "users", "alice", "noteMeta", "note-1")));
+    await assertFails(setDoc(doc(bob, "users", "alice", "noteMeta", "note-1"), meta));
+    await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-3"), { ...meta, secret: "x" }));
+    await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-4"), { ...meta, tags: Array.from({ length: 11 }, (_, i) => `t${i}`) }));
+  });
+});

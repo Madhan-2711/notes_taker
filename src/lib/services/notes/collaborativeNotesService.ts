@@ -27,6 +27,7 @@ import { arrayBufferToBase64, base64ToArrayBuffer } from "../crypto/serializatio
 import * as Y from "yjs";
 import { clampImage, DEFAULT_IMAGE_WIDTH, type FloatingImage } from "../../floatingImages";
 import { parseNoteParts } from "../../inlineImages";
+import { sanitizeDelta, type RichDelta } from "../../richText";
 import type { CollabRole } from "../../validations";
 import { deleteAllAttachments } from "../attachments";
 import { addRevisionToBatch, deleteAllRevisions } from "../noteRevisions";
@@ -43,12 +44,16 @@ export async function createCollabNote(
   title: string,
   content: string,
   groupIds: string[],
-  publicKey: CryptoKey
+  publicKey: CryptoKey,
+  delta?: RichDelta
 ): Promise<string> {
   // Create Yjs doc with initial content
   const ydoc = new Y.Doc();
   const ytext = ydoc.getText("content");
-  ytext.insert(0, content);
+  // Pictures are placed on the board separately, so only text carries over.
+  const textOps = delta ? sanitizeDelta(delta).ops.filter((op) => typeof op.insert === "string") : [];
+  if (textOps.length) ytext.applyDelta(textOps);
+  else ytext.insert(0, content);
 
   // Encode the initial state
   const snapshot = Y.encodeStateAsUpdate(ydoc);

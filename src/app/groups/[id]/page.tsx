@@ -71,9 +71,9 @@ export default function GroupDetailPage() {
     catch (e) { console.error("Delete failed", e); }
   };
 
-  const handleUpdateNote = async (id: string, title: string, content: string) => {
+  const handleUpdateNote = async (id: string, title: string, content: string, richContent: string) => {
     if (!user || !hasValidConfig) return;
-    await updateNormalNote(id, title, content);
+    await updateNormalNote(id, title, content, richContent);
   };
 
   if (loading) {

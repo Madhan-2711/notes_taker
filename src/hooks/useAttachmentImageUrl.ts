@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { attachmentAccess, downloadAttachment } from "../lib/services/attachments";
+import { loadAttachmentImage } from "../lib/services/attachments";
 
 /** Decrypts an image attachment into a short-lived object URL. */
 export function useAttachmentImageUrl(noteId: string, userId: string, privateKey: CryptoKey | null, id: string, alt: string) {
@@ -12,10 +12,9 @@ export function useAttachmentImageUrl(noteId: string, userId: string, privateKey
     let objectUrl = "";
     void (async () => {
       try {
-        const { key } = await attachmentAccess(noteId, userId, privateKey);
-        const blob = await downloadAttachment({ path: `notes/${noteId}/attachments/${id}`, name: alt, size: 0, uploader: "" }, key);
+        const blob = await loadAttachmentImage(noteId, userId, privateKey, id, alt);
         if (!active) return;
-        objectUrl = URL.createObjectURL(new Blob([blob], { type: "image/webp" }));
+        objectUrl = URL.createObjectURL(blob);
         setUrl(objectUrl);
       } catch {
         if (active) setError(true);

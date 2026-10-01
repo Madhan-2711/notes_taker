@@ -9,9 +9,11 @@ export interface NoteDraft {
   mode: NoteMode;
   title: string;
   content: string;
+  /** Serialized Quill Delta of the body; empty until the editor changes it. */
+  rich: string;
 }
 
-const emptyDraft = (ownerId: string): NoteDraft => ({ ownerId, mode: "normal", title: "", content: "" });
+const emptyDraft = (ownerId: string): NoteDraft => ({ ownerId, mode: "normal", title: "", content: "", rich: "" });
 
 const NoteDraftContext = createContext<{
   draft: NoteDraft | null;

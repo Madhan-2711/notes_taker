@@ -19,11 +19,15 @@ import { NoteCard } from "../../components/NoteCard";
 import { EditNoteModal } from "../../components/EditNoteModal";
 import { ViewNoteModal } from "../../components/ViewNoteModal";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Calendar, X, FolderOpen, Lock, Unlock, Users, Layers, Search, SlidersHorizontal, RotateCcw, Trash2, Pin } from "lucide-react";
+import { ArrowLeft, Calendar, X, FolderOpen, Lock, Unlock, Users, Layers, Search, SlidersHorizontal, RotateCcw, Trash2, Pin, Archive, Bell, Hash, NotebookText } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildSearchIndex } from "../../lib/noteSearch";
 import { useNotePins } from "../../hooks/useNotePins";
+import { useNoteMeta } from "../../contexts/NoteMetaContext";
+import { EMPTY_META, normalizeTag } from "../../lib/noteMeta";
+
+type NotesView = "active" | "archived" | "reminders";
 
 function localDateKey(timestamp: number): string {
   const date = new Date(timestamp);
@@ -51,6 +55,9 @@ function NotesPageContent() {
   const { user, loading } = useAuth();
   const { privateKey } = useUserKeys();
   const { pinnedIds, toggle: togglePin } = useNotePins(user?.uid);
+  const { metaByNote } = useNoteMeta();
+  const [view, setView] = useState<NotesView>("active");
+  const [tagFilter, setTagFilter] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [dateFilter, setDateFilter] = useState("");
@@ -109,9 +116,9 @@ function NotesPageContent() {
     } catch (caught) { setDeleteError(caught instanceof Error ? caught.message : "Could not permanently delete note."); }
   };
 
-  const handleUpdateNote = async (id: string, title: string, content: string) => {
+  const handleUpdateNote = async (id: string, title: string, content: string, richContent: string) => {
     if (!user || !hasValidConfig) return;
-    await updateNormalNote(id, title, content);
+    await updateNormalNote(id, title, content, richContent);
   };
 
   const searchActive = searchTerm.trim().length > 0;
@@ -131,8 +138,16 @@ function NotesPageContent() {
   const filteredNotes = useMemo(() => {
     const term = searchTerm.trim().toLocaleLowerCase();
     const matchingGroupIds = term ? new Set(groups.filter((group) => group.title.toLocaleLowerCase().includes(term)).map((group) => group.id)) : new Set<string>();
+    const tagTerm = normalizeTag(term);
     return notes.filter((note) => {
       if (showTrash ? (!note.deletedAt || note.authorId !== user?.uid) : Boolean(note.deletedAt)) return false;
+      const meta = metaByNote.get(note.id) ?? EMPTY_META;
+      if (!showTrash) {
+        if (view === "active" && meta.archived) return false;
+        if (view === "archived" && !meta.archived) return false;
+        if (view === "reminders" && meta.reminderAt === null) return false;
+      }
+      if (tagFilter && !meta.tags.includes(tagFilter)) return false;
       const matchesDate = !dateFilter
         ? true
         : localDateKey(note.createdAt) === dateFilter;
@@ -142,10 +157,30 @@ function NotesPageContent() {
       const matchesMode = !modeFilter
         ? true
         : (note.mode || "normal") === modeFilter;
-      const matchesSearch = !term || searchIndex.get(note.id)?.includes(term) || note.groupIds?.some((id) => matchingGroupIds.has(id));
+      const matchesSearch = !term || searchIndex.get(note.id)?.includes(term) || note.groupIds?.some((id) => matchingGroupIds.has(id))
+        || (tagTerm !== "" && meta.tags.some((tag) => tag.includes(tagTerm)));
       return matchesDate && matchesGroup && matchesMode && matchesSearch;
     });
-  }, [notes, groups, dateFilter, groupFilter, modeFilter, searchTerm, searchIndex, showTrash, user?.uid]);
+  }, [notes, groups, dateFilter, groupFilter, modeFilter, searchTerm, searchIndex, showTrash, user?.uid, metaByNote, view, tagFilter]);
+
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    metaByNote.forEach((meta) => meta.tags.forEach((tag) => tags.add(tag)));
+    return [...tags].sort();
+  }, [metaByNote]);
+
+  const viewCounts = useMemo(() => {
+    const live = notes.filter((note) => !note.deletedAt);
+    return {
+      archived: live.filter((note) => metaByNote.get(note.id)?.archived).length,
+      reminders: live.filter((note) => metaByNote.get(note.id)?.reminderAt != null).length,
+    };
+  }, [notes, metaByNote]);
+
+  const cardMeta = (noteId: string) => {
+    const meta = metaByNote.get(noteId) ?? EMPTY_META;
+    return { tags: meta.tags, reminderAt: meta.reminderAt };
+  };
 
   // Group filtered notes by date for display
   const groupedNotes = useMemo(() => {
@@ -224,7 +259,22 @@ function NotesPageContent() {
         </motion.div>
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-medium text-slate-700">{showTrash ? "Deleted notes stay here until you permanently remove them." : "Your writing, organised in one place."}</p>
+          {showTrash ? (
+            <p className="text-sm font-medium text-slate-700">Deleted notes stay here until you permanently remove them.</p>
+          ) : (
+            <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+              {([
+                { value: "active", label: "Notes", icon: NotebookText },
+                { value: "archived", label: `Archived (${viewCounts.archived})`, icon: Archive },
+                { value: "reminders", label: `Reminders (${viewCounts.reminders})`, icon: Bell },
+              ] as const).map(({ value, label, icon: Icon }) => (
+                <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-indigo-600 ${view === value ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-800 hover:border-indigo-400"}`}>
+                  <Icon size={16} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
           <button type="button" onClick={() => setShowTrash((value) => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 hover:border-indigo-400 focus-visible:outline-2 focus-visible:outline-indigo-600">
             {showTrash ? <RotateCcw size={17} /> : <Trash2 size={17} />}{showTrash ? "Back to notes" : `Trash (${notes.filter((note) => note.deletedAt && note.authorId === user.uid).length})`}
           </button>
@@ -242,7 +292,7 @@ function NotesPageContent() {
         </div>
 
         <details className="mb-6 rounded-2xl border border-slate-200 bg-white/85 px-4 py-3">
-          <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold text-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-600"><SlidersHorizontal size={17} /> Filters {(modeFilter || groupFilter) && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">Active</span>}</summary>
+          <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold text-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-600"><SlidersHorizontal size={17} /> Filters {(modeFilter || groupFilter || tagFilter) && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800">Active</span>}</summary>
           <div className="pt-3">
         {/* Mode Filter Chips */}
         <motion.div
@@ -312,13 +362,28 @@ function NotesPageContent() {
             ))}
           </motion.div>
         )}
+
+        {allTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-foreground/40">
+              <Hash size={13} />
+              <span>Tags:</span>
+            </div>
+            {allTags.map((tag) => (
+              <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? "" : tag)}
+                className={`min-h-10 rounded-full border px-3.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-indigo-500 ${tagFilter === tag ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300"}`}>
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
           </div>
         </details>
 
         {!showTrash && filteredNotes.some((note) => pinnedIds.has(note.id)) && <section className="mb-8" aria-label="Pinned notes">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"><Pin size={16} /> Pinned</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredNotes.filter((note) => pinnedIds.has(note.id)).map((note) => <NoteCard key={note.id} note={note} groups={groups} onDelete={handleDeleteNote} onEdit={setEditingNote} onView={setViewingNote} pinned canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} />)}
+            {filteredNotes.filter((note) => pinnedIds.has(note.id)).map((note) => <NoteCard key={note.id} note={note} groups={groups} onDelete={handleDeleteNote} onEdit={setEditingNote} onView={setViewingNote} pinned canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} {...cardMeta(note.id)} />)}
           </div>
         </section>}
 
@@ -344,7 +409,7 @@ function NotesPageContent() {
                         </div>
                       </div>
                     ) : (
-                      <NoteCard key={note.id} note={note} groups={groups} onDelete={handleDeleteNote} onEdit={setEditingNote} onView={setViewingNote} pinned={pinnedIds.has(note.id)} canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} />
+                      <NoteCard key={note.id} note={note} groups={groups} onDelete={handleDeleteNote} onEdit={setEditingNote} onView={setViewingNote} pinned={pinnedIds.has(note.id)} canDelete={note.authorId === user.uid} onTogglePin={(id) => void togglePin(id)} {...cardMeta(note.id)} />
                     ))}
                   </AnimatePresence>
                 </div>
@@ -358,7 +423,7 @@ function NotesPageContent() {
             className="py-24 text-center text-foreground/40 font-medium flex flex-col items-center gap-4"
           >
             <div className="w-16 h-16 border-2 border-dashed border-border rounded-full flex items-center justify-center">🍃</div>
-            {showTrash ? <p>Trash is empty.</p> : dateFilter || groupFilter || modeFilter || searchTerm ? (
+            {showTrash ? <p>Trash is empty.</p> : view === "archived" ? <p>No archived notes.</p> : view === "reminders" ? <p>No reminders set. Open a note to add one.</p> : dateFilter || groupFilter || modeFilter || tagFilter || searchTerm ? (
               <p>No notes found for the selected filters.</p>
             ) : (
               <p>Your space is empty. Start writing to see your notes here.</p>

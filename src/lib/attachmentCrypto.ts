@@ -1,10 +1,16 @@
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./services/crypto/serialization";
 
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-export const ATTACHMENT_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md,.csv,.docx,.xlsx,.pptx";
+export const ATTACHMENT_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md,.csv,.docx,.xlsx,.pptx,.webm,.ogg,.m4a,.mp3";
 const extensions = new Set(ATTACHMENT_ACCEPT.split(","));
 
 export const IMAGE_EXT = /\.(png|jpe?g|webp|gif)$/i;
+export const AUDIO_EXT = /\.(webm|ogg|m4a|mp3)$/i;
+
+export function audioMimeType(name: string): string {
+  const extension = name.toLowerCase().split(".").pop();
+  return extension === "ogg" ? "audio/ogg" : extension === "m4a" ? "audio/mp4" : extension === "mp3" ? "audio/mpeg" : "audio/webm";
+}
 
 // Firestore caps a document at ~1 MiB. Attachments are stored inline as a
 // base64 string, so we hold the ciphertext base64 well under that to leave room
@@ -15,7 +21,7 @@ export const MAX_INLINE_PLAINTEXT = Math.floor((MAX_INLINE_B64 * 3) / 4) - 16; /
 export function validateAttachment(name: string, size: number) {
   if (!size || size > MAX_ATTACHMENT_BYTES) throw new Error("Choose a non-empty file up to 10 MB.");
   const extension = name.slice(name.lastIndexOf(".")).toLowerCase();
-  if (!extensions.has(extension)) throw new Error("Choose an image, PDF, text file, or Office document.");
+  if (!extensions.has(extension)) throw new Error("Choose an image, audio clip, PDF, text file, or Office document.");
 }
 
 export function optimizedImageName(name: string): string {
