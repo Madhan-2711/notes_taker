@@ -376,6 +376,22 @@ service cloud.firestore {
     }
 
     // Non-sensitive identity and encryption material, fetched by exact UID.
+    function usernamePath(name) {
+      return /databases/$(database)/documents/usernames/$(name);
+    }
+
+    // A profile may only point at a username its owner holds, and changing it must
+    // release the old claim in the same batch.
+    function validUsernameChange(uid) {
+      let next = request.resource.data.get("username", "");
+      let previous = resource.data.get("username", "");
+      return next == previous
+        || (
+          (next == "" || (existsAfter(usernamePath(next)) && getAfter(usernamePath(next)).data.uid == uid))
+          && (previous == "" || !existsAfter(usernamePath(previous)))
+        );
+    }
+
     match /public_profiles/{uid} {
       allow get: if signedIn();
       allow list: if false;
@@ -389,8 +405,24 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["displayName", "photoURL", "publicKey"]);
+          .hasOnly(["displayName", "photoURL", "publicKey", "username"])
+        && validUsernameChange(uid);
       allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Exact-name lookup only. Each claim belongs to the profile that points at it.
+    match /usernames/{name} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && name.matches("^[a-z0-9_]{3,20}$")
+        && request.resource.data.keys().hasOnly(["uid"])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.get("username", "") == name;
+      allow update: if false;
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.get("username", "") != name;
     }
 
     // Exact-address lookup only; collection enumeration is denied.

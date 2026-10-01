@@ -10,6 +10,7 @@ import { NoteDraftProvider } from "../contexts/NoteDraftContext";
 import { NoteMetaProvider } from "../contexts/NoteMetaContext";
 import { ReminderNotifier } from "../components/ReminderNotifier";
 import { AppInstall } from "../components/AppInstall";
+import { UsernamePrompt } from "../components/UsernamePrompt";
 import { isIndexableDeployment, productionSiteUrl } from "../lib/seo";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
@@ -66,6 +67,7 @@ export default function RootLayout({
               {children}
             </main>
             <ReminderNotifier />
+            <UsernamePrompt />
             </NoteDraftProvider>
             </NoteMetaProvider>
           </UserKeysProvider>

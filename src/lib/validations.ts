@@ -152,6 +152,8 @@ export interface UserProfile {
   displayName: string;
   photoURL: string | null;
   publicKey: string;
+  /** Unique handle used to find friends; absent until the user picks one. */
+  username?: string;
   wrappedPrivateKey?: string;
   createdAt: number;
 }

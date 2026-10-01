@@ -38,6 +38,8 @@ interface UserKeysContextValue {
   hasKeys: boolean;
   needsVaultPassword: boolean;
   needsVaultSetup: boolean;
+  /** True while a vault setup or unlock dialog is on screen. */
+  vaultDialogOpen: boolean;
   openVaultSetup: () => void;
   setVaultPassword: (password: string) => Promise<void>;
   unlockVault: (password: string) => Promise<void>;
@@ -218,12 +220,14 @@ export function UserKeysProvider({ children }: { children: ReactNode }) {
       hasKeys,
       needsVaultPassword,
       needsVaultSetup,
+      vaultDialogOpen: (needsVaultSetup && !setupDismissed) || needsVaultPassword,
       openVaultSetup,
       setVaultPassword,
       unlockVault,
       error,
     }),
     [
+      setupDismissed,
       publicKey,
       privateKey,
       isReady,

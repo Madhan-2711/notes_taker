@@ -470,3 +470,51 @@ describe("rich content and personal note settings", () => {
     await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-4"), { ...meta, tags: Array.from({ length: 11 }, (_, i) => `t${i}`) }));
   });
 });
+
+describe("usernames", () => {
+  async function claim(db: ReturnType<ReturnType<RulesTestEnvironment["authenticatedContext"]>["firestore"]>, uid: string, name: string, previous?: string) {
+    const batch = writeBatch(db);
+    batch.set(doc(db, "usernames", name), { uid });
+    batch.update(doc(db, "public_profiles", uid), { username: name });
+    if (previous) batch.delete(doc(db, "usernames", previous));
+    return batch.commit();
+  }
+
+  test("a user can claim a free username and others can look it up", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    await assertSucceeds(claim(alice, "alice", "alice_w"));
+    await assertSucceeds(getDoc(doc(bob, "usernames", "alice_w")));
+    await assertFails(getDocs(collection(bob, "usernames")));
+  });
+
+  test("a taken username cannot be stolen or overwritten", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    await assertSucceeds(claim(alice, "alice", "shared"));
+    await assertFails(claim(bob, "bob", "shared"));
+    await assertFails(deleteDoc(doc(bob, "usernames", "shared")));
+    await assertFails(updateDoc(doc(bob, "public_profiles", "bob"), { username: "shared" }));
+  });
+
+  test("changing a username must release the old one", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertSucceeds(claim(alice, "alice", "first"));
+    await assertFails(claim(alice, "alice", "second"));
+    await assertSucceeds(claim(alice, "alice", "second", "first"));
+    let stillClaimed = true;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      stillClaimed = (await getDoc(doc(context.firestore(), "usernames", "first"))).exists();
+    });
+    expect(stillClaimed).toBe(false);
+  });
+
+  test("invalid usernames and claims for other accounts are rejected", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertFails(claim(alice, "alice", "Bad Name"));
+    const batch = writeBatch(alice);
+    batch.set(doc(alice, "usernames", "for_bob"), { uid: "bob" });
+    batch.update(doc(alice, "public_profiles", "alice"), { username: "for_bob" });
+    await assertFails(batch.commit());
+  });
+});

@@ -24,7 +24,9 @@ import { FriendCard } from "../../components/FriendCard";
 import { CollabInviteCard } from "../../components/CollabInviteCard";
 import { KeyBackupRestore } from "../../components/KeyBackupRestore";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock, CloudUpload } from "lucide-react";
+import { ArrowLeft, Search, Send, UserPlus, Users, Inbox, Lock, CloudUpload, AtSign } from "lucide-react";
+import { useMyUsername } from "../../hooks/useMyUsername";
+import { UsernameForm } from "../../components/UsernameForm";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -37,6 +39,8 @@ export default function FriendsPage() {
   } = useUserKeys();
 
   const [searchEmail, setSearchEmail] = useState("");
+  const myUsername = useMyUsername(user?.uid);
+  const [editingUsername, setEditingUsername] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchSuccess, setSearchSuccess] = useState(false);
   const [sending, setSending] = useState(false);
@@ -230,6 +234,34 @@ export default function FriendsPage() {
         </motion.div>
       )}
 
+      {/* Your username */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass neubrutal rounded-[var(--radius-xl)] p-6 mb-6"
+        aria-label="Your username"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AtSign size={16} className="text-primary" />
+            <h2 className="text-sm font-bold tracking-tight">Your username</h2>
+          </div>
+          {myUsername && !editingUsername && (
+            <div className="flex items-center gap-3">
+              <span className="text-base font-bold text-slate-900">@{myUsername}</span>
+              <button type="button" onClick={() => setEditingUsername(true)} className="min-h-11 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-600">Change</button>
+            </div>
+          )}
+        </div>
+        {myUsername === null && <p className="mt-2 text-sm text-slate-600">Pick a username so friends can find you without your email.</p>}
+        {user && (myUsername === null || editingUsername) && (
+          <div className="mt-4">
+            <UsernameForm userId={user.uid} initial={myUsername ?? ""} onSaved={() => setEditingUsername(false)} />
+            {editingUsername && <button type="button" onClick={() => setEditingUsername(false)} className="mt-2 min-h-11 text-sm font-semibold text-slate-600 hover:text-slate-900">Cancel</button>}
+          </div>
+        )}
+      </motion.section>
+
       {/* Search / Send Request */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -246,10 +278,13 @@ export default function FriendsPage() {
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40" />
             <input
-              type="email"
+              type="text"
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              placeholder="Enter friend's email address..."
+              placeholder="Friend's username or email address..."
+              aria-label="Friend's username or email address"
+              autoCapitalize="none"
+              spellCheck={false}
               className="w-full pl-9 pr-4 py-2.5 text-sm bg-transparent border border-border/60 rounded-xl focus:outline-none focus:border-primary transition-colors placeholder:text-foreground/30"
             />
           </div>

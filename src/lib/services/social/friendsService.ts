@@ -17,10 +17,11 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { type FriendRequest, type UserProfile } from "../../validations";
-import { searchUserByEmail } from "./usersService";
+import { searchUserByEmail, searchUserByUsername } from "./usersService";
+import { isEmailLike, normalizeUsername } from "../../usernames";
 
 /**
- * Send a friend request to a user by email.
+ * Send a friend request to a user by email or username.
  * Checks for existing pending requests to prevent spam.
  */
 export async function sendFriendRequest(
@@ -28,12 +29,12 @@ export async function sendFriendRequest(
   senderEmail: string,
   senderName: string,
   senderPhoto: string | null,
-  receiverEmail: string
+  target: string
 ): Promise<void> {
-  // Look up receiver by email
-  const receiver = await searchUserByEmail(receiverEmail);
+  const byEmail = isEmailLike(target);
+  const receiver = byEmail ? await searchUserByEmail(target) : await searchUserByUsername(target);
   if (!receiver) {
-    throw new Error("No user found with that email address.");
+    throw new Error(byEmail ? "No user found with that email address." : "No user found with that username.");
   }
 
   if (receiver.uid === senderId) {
@@ -73,7 +74,8 @@ export async function sendFriendRequest(
     senderName,
     senderPhoto,
     receiverId: receiver.uid,
-    receiverEmail: receiver.email,
+    // Requests found by username show the handle instead of an email address.
+    receiverEmail: byEmail ? receiver.email : `@${normalizeUsername(target)}`,
     receiverName: receiver.displayName,
     receiverPhoto: receiver.photoURL,
     status: "pending",
