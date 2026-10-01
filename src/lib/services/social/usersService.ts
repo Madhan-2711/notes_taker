@@ -56,7 +56,7 @@ async function createOrLoadUserProfile(
   const publicProfile = publicSnap.exists()
     ? publicSnap.data()
     : {
-        displayName: user.displayName || "Anonymous",
+        displayName: user.displayName || user.email?.split("@")[0] || "Anonymous",
         photoURL: user.photoURL || null,
         publicKey: legacy.publicKey || publicKeyJwk || "",
         createdAt: legacy.createdAt || Date.now(),
