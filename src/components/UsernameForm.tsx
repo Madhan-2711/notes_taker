@@ -43,7 +43,7 @@ export function UsernameForm({ userId, initial = "", submitLabel = "Save", onSav
             className="h-12 w-full rounded-xl border border-slate-300 pl-9 pr-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
         </div>
         <button type="submit" disabled={busy || !value}
-          className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+          className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
           {busy && <Loader2 size={15} className="animate-spin" />} {submitLabel}
         </button>
       </div>

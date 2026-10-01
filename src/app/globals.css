@@ -37,6 +37,11 @@
     color: var(--foreground);
     @apply antialiased;
   }
+  /* Tailwind v4 resets buttons to the default arrow cursor; restore the hand so buttons look clickable. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
 }
 
 @layer utilities {
