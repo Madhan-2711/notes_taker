@@ -97,8 +97,8 @@ export function Dialog({ open, onClose, labelledBy, label, children, size = "md"
             tabIndex={-1}
             initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            exit={reduceMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: 16, scale: 0.98, transition: { duration: 0.14, ease: "easeIn" } }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className={`relative flex w-full flex-col overflow-hidden border-2 border-slate-900 bg-white shadow-[var(--neubrutalism-shadow)] focus:outline-none ${shape} ${SIZES[size]} ${className}`}
           >
             {children}

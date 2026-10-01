@@ -1,27 +1,37 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
 import { useUserKeys } from "../../../hooks/useUserKeys";
+import { useNotePins } from "../../../hooks/useNotePins";
+import { useTrashWithUndo } from "../../../hooks/useTrashWithUndo";
+import { useNoteMeta } from "../../../contexts/NoteMetaContext";
 import { db, hasValidConfig } from "../../../lib/firebaseConfig";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { type Note, type Group } from "../../../lib/validations";
-import { subscribeToNotes, moveNoteToTrash, updateNormalNote } from "../../../lib/services/notes/normalNotesService";
+import { EMPTY_META } from "../../../lib/noteMeta";
+import { subscribeToNotes, updateNormalNote } from "../../../lib/services/notes/normalNotesService";
 import { NoteCard } from "../../../components/NoteCard";
 import { EditNoteModal } from "../../../components/EditNoteModal";
 import { ViewNoteModal } from "../../../components/ViewNoteModal";
 import { ManageGroupModal } from "../../../components/ManageGroupModal";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Settings } from "lucide-react";
+import { PageHeader } from "../../../components/PageHeader";
+import { CardSkeletons, EmptyState, PageLoading, SignInRequired } from "../../../components/PageState";
+import { AnimatePresence } from "framer-motion";
+import { FolderOpen, Settings } from "lucide-react";
 import Link from "next/link";
 
 export default function GroupDetailPage() {
   const { id: groupId } = useParams<{ id: string }>();
+  const router = useRouter();
   const { user, loading } = useAuth();
   const { privateKey } = useUserKeys();
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const { pinnedIds, toggle: togglePin } = useNotePins(user?.uid);
+  const { metaByNote } = useNoteMeta();
+  const trashNote = useTrashWithUndo();
+  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [groups, setGroups] = useState<Group[] | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [managingGroup, setManagingGroup] = useState<Group | null>(null);
@@ -44,13 +54,15 @@ export default function GroupDetailPage() {
     return () => unsub();
   }, [user]);
 
-  const currentGroup = groups.find((g) => g.id === groupId) ?? null;
+  const allNotes = useMemo(() => notes ?? [], [notes]);
+  const currentGroup = groups?.find((g) => g.id === groupId) ?? null;
 
   // Only notes belonging to this group
   const groupNotes = useMemo(
-    () => notes.filter((n) => n.groupIds?.includes(groupId)),
-    [notes, groupId]
+    () => allNotes.filter((n) => n.groupIds?.includes(groupId)),
+    [allNotes, groupId]
   );
+  const groupNoteIds = useMemo(() => groupNotes.map((n) => n.id), [groupNotes]);
 
   // Group notes by date for display
   const groupedByDate = useMemo(() => {
@@ -65,10 +77,9 @@ export default function GroupDetailPage() {
     return grouped;
   }, [groupNotes]);
 
-  const handleDeleteNote = async (id: string) => {
-    if (!user || !hasValidConfig) return;
-    try { await moveNoteToTrash(id); }
-    catch (e) { console.error("Delete failed", e); }
+  const cardMeta = (noteId: string) => {
+    const meta = metaByNote.get(noteId) ?? EMPTY_META;
+    return { tags: meta.tags, reminderAt: meta.reminderAt };
   };
 
   const handleUpdateNote = async (id: string, title: string, content: string, richContent: string) => {
@@ -76,110 +87,82 @@ export default function GroupDetailPage() {
     await updateNormalNote(id, title, content, richContent);
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading label="Loading group" />;
+  if (!user) return <SignInRequired>Sign in to view this group.</SignInRequired>;
 
-  if (!user) {
+  if (groups !== null && !currentGroup) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto gap-4">
-        <p className="text-foreground/60 text-lg">Please sign in to view this group.</p>
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <PageHeader title="Group not found" back={{ href: "/groups", label: "Groups" }} />
+        <EmptyState icon={<FolderOpen size={22} />} title="This group doesn't exist" description="It may have been deleted. Your notes are still in Notes."
+          action={<Link href="/groups" className="btn-secondary">See all groups</Link>} />
       </div>
     );
   }
 
   return (
     <>
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:mt-4">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between gap-4 mb-8"
-        >
-          <div className="flex items-center gap-4">
-            <Link
-              href="/groups"
-              className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-foreground transition-colors"
-            >
-              <ArrowLeft size={16} /> Groups
-            </Link>
-            <div className="h-4 w-px bg-border"></div>
-
-            {currentGroup && (
-              <div
-                className="w-3 h-3 rounded-full border-2 border-white shadow-sm"
-                style={{ backgroundColor: currentGroup.color }}
-              />
-            )}
-
-            <h1 className="text-2xl font-bold tracking-tight">
-              {currentGroup?.title ?? "Group"}
-            </h1>
-            <span className="text-sm text-foreground/40 font-medium">
-              {groupNotes.length} {groupNotes.length === 1 ? "note" : "notes"}
+      <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <PageHeader
+          back={{ href: "/groups", label: "Groups" }}
+          title={
+            <span className="flex items-center gap-3">
+              {currentGroup && <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: currentGroup.color }} aria-hidden="true" />}
+              <span className="truncate">{currentGroup?.title ?? "Group"}</span>
             </span>
-          </div>
-
-          {currentGroup && (
-            <button
-              onClick={() => setManagingGroup(currentGroup)}
-              className="flex items-center gap-2 text-sm font-medium text-foreground/50 hover:text-primary glass neubrutal px-4 py-2 rounded-card transition-colors"
-            >
-              <Settings size={15} /> Manage
+          }
+          subtitle={notes === null ? "Loading…" : `${groupNotes.length} ${groupNotes.length === 1 ? "note" : "notes"}`}
+          actions={currentGroup && (
+            <button type="button" onClick={() => setManagingGroup(currentGroup)} className="btn-secondary">
+              <Settings size={16} aria-hidden="true" /> Manage
             </button>
           )}
-        </motion.div>
+        />
 
         {/* Notes */}
-        {Object.keys(groupedByDate).length > 0 ? (
+        {notes === null || groups === null ? (
+          <CardSkeletons count={3} />
+        ) : Object.keys(groupedByDate).length > 0 ? (
           <div className="space-y-10">
             {Object.entries(groupedByDate).map(([dateLabel, dateNotes]) => (
-              <motion.section key={dateLabel} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <h3 className="text-xs font-medium tracking-widest uppercase text-foreground/35 mb-5 flex items-center gap-3">
+              <section key={dateLabel} aria-label={dateLabel}>
+                <h3 className="mb-4 flex items-center gap-3 text-sm font-semibold text-slate-700">
                   <span>{dateLabel}</span>
-                  <span className="flex-1 h-px bg-border/50"></span>
-                  <span className="text-foreground/25">{dateNotes.length}</span>
+                  <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+                  <span className="tabular-nums text-slate-500">{dateNotes.length}</span>
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   <AnimatePresence>
                     {dateNotes.map((note) => (
                       <NoteCard
                         key={note.id}
                         note={note}
                         groups={groups}
-                        onDelete={handleDeleteNote}
+                        onDelete={(id) => void trashNote(id)}
                         onEdit={setEditingNote}
                         onView={setViewingNote}
-                        canDelete={note.authorId === user?.uid}
+                        canDelete={note.authorId === user.uid}
+                        pinned={pinnedIds.has(note.id)}
+                        onTogglePin={(id) => void togglePin(id)}
+                        {...cardMeta(note.id)}
                       />
                     ))}
                   </AnimatePresence>
                 </div>
-              </motion.section>
+              </section>
             ))}
           </div>
         ) : (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="py-24 text-center text-foreground/40 font-medium flex flex-col items-center gap-4"
-          >
-            <div className="w-16 h-16 border-2 border-dashed border-border rounded-full flex items-center justify-center">🍃</div>
-            <p>No notes in this group yet.</p>
-            {currentGroup && (
-              <button
-                onClick={() => setManagingGroup(currentGroup)}
-                className="text-sm font-semibold text-primary hover:underline"
-              >
-                Add notes →
+          <EmptyState
+            icon={<FolderOpen size={22} />}
+            title="No notes in this group yet"
+            description="Add existing notes from Manage, or pick this group when you write a new note."
+            action={currentGroup && (
+              <button type="button" onClick={() => setManagingGroup(currentGroup)} className="btn-secondary">
+                Add notes
               </button>
             )}
-          </motion.div>
+          />
         )}
       </div>
 
@@ -188,30 +171,33 @@ export default function GroupDetailPage() {
         note={editingNote}
         onClose={() => setEditingNote(null)}
         onSave={handleUpdateNote}
-        groups={groups}
-        userId={user?.uid}
+        groups={groups ?? []}
+        userId={user.uid}
         privateKey={privateKey}
       />
 
       {/* View Modal */}
       <ViewNoteModal
         note={viewingNote}
-        groups={groups}
+        groups={groups ?? []}
         onClose={() => setViewingNote(null)}
         onEdit={(note) => { setViewingNote(null); setEditingNote(note); }}
-        userId={user?.uid}
+        userId={user.uid}
         privateKey={privateKey}
+        pinned={viewingNote ? pinnedIds.has(viewingNote.id) : false}
+        onTogglePin={(id) => void togglePin(id)}
+        onTrash={viewingNote && viewingNote.authorId === user.uid ? (note) => { setViewingNote(null); void trashNote(note.id); } : undefined}
       />
 
       {/* Manage Group Modal */}
       {currentGroup && (
         <ManageGroupModal
           group={managingGroup}
-          allNotes={notes}
-          groupNoteIds={groupNotes.map((n) => n.id)}
+          allNotes={allNotes}
+          groupNoteIds={groupNoteIds}
           userId={user.uid}
           onClose={() => setManagingGroup(null)}
-          onDeleted={() => setManagingGroup(null)}
+          onDeleted={() => { setManagingGroup(null); router.push("/groups"); }}
         />
       )}
     </>
