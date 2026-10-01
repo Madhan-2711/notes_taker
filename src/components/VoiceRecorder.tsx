@@ -245,7 +245,7 @@ export function VoiceRecorder({ disabled = false, onSave, onInsertText }: {
 
       {transcript && state !== "idle" && (
         <div className="mt-3 rounded-lg bg-slate-50 p-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Transcript (made on this device)</p>
+          <p className="text-sm font-semibold text-slate-800">Transcript (made on this device)</p>
           <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{transcript}</p>
           {state === "recorded" && onInsertText && (
             <button type="button" onClick={() => { onInsertText(transcript); setTranscript(""); }} className={`${button} mt-2 border-indigo-300 text-indigo-800 hover:bg-indigo-50`}>

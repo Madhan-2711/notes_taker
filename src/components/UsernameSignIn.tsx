@@ -66,7 +66,7 @@ export function UsernameSignIn({ onSignedIn }: { onSignedIn: () => void }) {
         className="h-12 w-full rounded-xl border border-slate-300 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
       <button type="submit" disabled={busy || !username.trim() || !password}
-        className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-card bg-primary px-4 text-sm font-bold text-primary-foreground neubrutal disabled:opacity-50">
+        className="btn-primary mt-5 w-full">
         {busy && <Loader2 size={16} className="animate-spin" />} Sign in
       </button>
     </form>

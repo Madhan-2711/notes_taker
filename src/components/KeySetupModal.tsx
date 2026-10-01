@@ -72,7 +72,7 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
                   <Shield size={20} className="text-indigo-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold tracking-tight">Set Up Vault Password</h2>
+                  <h2 className="text-lg font-bold tracking-tight">Set up your vault password</h2>
                   <p className="text-xs text-foreground/45">Sync your keys across devices</p>
                 </div>
               </div>
@@ -88,8 +88,8 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
 
             {/* Password */}
             <div>
-              <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
-                Vault Password
+              <label className="label">
+                Vault password
               </label>
               <div className="relative">
                 <input
@@ -112,7 +112,7 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
 
             {/* Confirm Password */}
             <div>
-              <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
+              <label className="label">
                 Confirm Password
               </label>
               <input
@@ -139,9 +139,9 @@ export function KeySetupModal({ isOpen, onClose, onSetPassword }: KeySetupModalP
               <button
                 type="submit"
                 disabled={!password || !confirm || saving}
-                className="bg-primary text-primary-foreground neubrutal px-6 py-2 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                className="btn-primary"
               >
-                {saving ? "Setting up..." : "Set Password"}
+                {saving ? "Setting up…" : "Set password"}
               </button>
             </div>
           </motion.form>

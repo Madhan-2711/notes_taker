@@ -161,7 +161,7 @@ export function KeyBackupRestore({
             {/* Header */}
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold tracking-tight">
-                {mode === "menu" && "Key Backup & Restore"}
+                {mode === "menu" && "Back up or restore keys"}
                 {mode === "backup" && "Backup to Cloud"}
                 {mode === "restore" && "Restore from Cloud"}
               </h2>
@@ -202,7 +202,7 @@ export function KeyBackupRestore({
                     <CloudUpload size={18} className="text-emerald-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold">Backup Keys</p>
+                    <p className="text-sm font-bold">Back up keys</p>
                     <p className="text-xs text-foreground/40">Encrypt and save to cloud with a passcode</p>
                   </div>
                 </button>
@@ -215,13 +215,13 @@ export function KeyBackupRestore({
                     <CloudDownload size={18} className="text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold">Restore Keys</p>
+                    <p className="text-sm font-bold">Restore keys</p>
                     <p className="text-xs text-foreground/40">Download from cloud using your passcode</p>
                   </div>
                 </button>
 
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium">
-                  ⚠️ <strong>Important:</strong> First backup from the device that <em>created</em> your encrypted notes, then restore on other devices.
+                  <strong>Important:</strong> First backup from the device that <em>created</em> your encrypted notes, then restore on other devices.
                 </div>
               </div>
             )}
@@ -240,7 +240,7 @@ export function KeyBackupRestore({
 
                 {/* Passcode */}
                 <div>
-                  <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
+                  <label className="label">
                     Passcode
                   </label>
                   <div className="relative">
@@ -264,7 +264,7 @@ export function KeyBackupRestore({
 
                 {/* Confirm */}
                 <div>
-                  <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
+                  <label className="label">
                     Confirm Passcode
                   </label>
                   <input
@@ -286,7 +286,7 @@ export function KeyBackupRestore({
                   <button
                     onClick={handleBackup}
                     disabled={!password || !confirmPassword || loading}
-                    className="flex-1 bg-emerald-500 text-white neubrutal px-4 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 hover:bg-emerald-600 transition-colors"
+                    className="btn-primary flex-1"
                   >
                     {loading ? "Backing up..." : "Backup to Cloud"}
                   </button>
@@ -308,7 +308,7 @@ export function KeyBackupRestore({
 
                 {/* Passcode */}
                 <div>
-                  <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
+                  <label className="label">
                     Passcode
                   </label>
                   <div className="relative">
@@ -340,7 +340,7 @@ export function KeyBackupRestore({
                   <button
                     onClick={handleRestore}
                     disabled={!password || loading}
-                    className="flex-1 bg-primary text-white neubrutal px-4 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 hover:bg-primary/90 transition-colors"
+                    className="btn-primary flex-1"
                   >
                     {loading ? "Restoring..." : "Restore from Cloud"}
                   </button>

@@ -97,7 +97,7 @@ export function DrawingToolbar({
 
           {/* Size */}
           <label className="flex items-center gap-2 px-1" title="Brush size">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground/40">
+            <span className="text-xs font-semibold text-slate-700">
               Size
             </span>
             <input

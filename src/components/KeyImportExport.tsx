@@ -246,9 +246,9 @@ export function KeyImportExport({
             {/* Header */}
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold tracking-tight">
-                {mode === "menu" && "Import / Export Keys"}
-                {mode === "export" && "Export Keys"}
-                {mode === "import" && "Import Keys"}
+                {mode === "menu" && "Import or export keys"}
+                {mode === "export" && "Export keys"}
+                {mode === "import" && "Import keys"}
               </h2>
               <button onClick={handleClose} className="text-foreground/40 hover:text-foreground p-1">
                 <X size={20} />
@@ -277,7 +277,7 @@ export function KeyImportExport({
                   Export your encryption keys to a password-protected file, or import keys from a previous export.
                 </p>
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium">
-                  ⚠️ <strong>Important:</strong> Always export from the device that <em>created</em> your encrypted notes. Importing keys from a different device won&#39;t decrypt notes created elsewhere.
+                  <strong>Important:</strong> Always export from the device that <em>created</em> your encrypted notes. Importing keys from a different device won&#39;t decrypt notes created elsewhere.
                 </div>
 
                 <button
@@ -289,7 +289,7 @@ export function KeyImportExport({
                     <Download size={18} className="text-emerald-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold">Export Keys</p>
+                    <p className="text-sm font-bold">Export keys</p>
                     <p className="text-xs text-foreground/40">Download a password-protected backup file</p>
                   </div>
                 </button>
@@ -302,7 +302,7 @@ export function KeyImportExport({
                     <Upload size={18} className="text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold">Import Keys</p>
+                    <p className="text-sm font-bold">Import keys</p>
                     <p className="text-xs text-foreground/40">Restore from a previously exported file</p>
                   </div>
                 </button>
@@ -353,7 +353,7 @@ export function KeyImportExport({
                   <button
                     onClick={handleExport}
                     disabled={loading || password.length < 6 || password !== confirmPassword}
-                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white font-bold text-sm py-2.5 rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-40"
+                    className="btn-primary flex-1"
                   >
                     {loading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                     {loading ? "Exporting..." : "Export"}
@@ -456,7 +456,7 @@ export function KeyImportExport({
                   <button
                     onClick={handleImport}
                     disabled={loading || !importFile || !password}
-                    className="flex-1 flex items-center justify-center gap-2 bg-primary text-white font-bold text-sm py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-40"
+                    className="btn-primary flex-1"
                   >
                     {loading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                     {loading ? "Importing..." : "Import"}

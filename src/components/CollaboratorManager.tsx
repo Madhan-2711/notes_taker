@@ -142,7 +142,7 @@ export function CollaboratorManager({
             {/* Invite form */}
             {showInviteForm ? (
               <div className="border-t border-border/30 pt-4 space-y-3">
-                <p className="text-xs font-medium tracking-widest uppercase text-foreground/40">
+                <p className="text-sm font-semibold text-slate-800">
                   Invite a Friend
                 </p>
 
@@ -195,9 +195,9 @@ export function CollaboratorManager({
                     <button
                       onClick={handleInvite}
                       disabled={!selectedFriend || inviting}
-                      className="w-full bg-emerald-500 text-white font-bold text-sm py-2.5 rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-40"
+                      className="btn-primary w-full"
                     >
-                      {inviting ? "Sending invite..." : "Send Invite"}
+                      {inviting ? "Sending invite…" : "Send invite"}
                     </button>
                   </>
                 ) : (

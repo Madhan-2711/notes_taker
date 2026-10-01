@@ -99,10 +99,10 @@ export function ReminderNotifier() {
         <div key={item.noteId} role="alert" className="flex items-start gap-3 rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-lg">
           <Bell size={20} className="mt-0.5 shrink-0 text-amber-600" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Reminder</p>
+            <p className="text-sm font-bold text-amber-900">Reminder</p>
             <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
             <button type="button" onClick={() => { setDue((current) => current.filter((entry) => entry.noteId !== item.noteId)); router.push(item.url); }}
-              className="mt-2 min-h-11 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+              className="btn-primary mt-2">
               Open note
             </button>
           </div>

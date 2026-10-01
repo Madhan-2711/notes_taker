@@ -361,7 +361,7 @@ export function CollabNoteEditor({
       )}
 
       <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 sm:hidden">
-        <span>{fitBoard ? "Whole page view" : "Full-size board — swipe sideways to see more"}</span>
+        <span>{fitBoard ? "Whole page view" : "Full-size board. Swipe sideways to see more."}</span>
         <button type="button" onClick={() => setFitBoard((value) => !value)} className="min-h-11 shrink-0 rounded-lg border border-indigo-300 px-3 font-semibold text-indigo-700 focus-visible:outline-2 focus-visible:outline-indigo-600">{fitBoard ? "Full size" : "Fit page"}</button>
       </div>
 

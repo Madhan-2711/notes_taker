@@ -61,7 +61,7 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
                 <Lock size={20} className="text-amber-600" />
               </div>
               <div>
-                <h2 className="text-lg font-bold tracking-tight">Unlock Your Vault</h2>
+                <h2 className="text-lg font-bold tracking-tight">Unlock your vault</h2>
                 <p className="text-xs text-foreground/45">Enter your vault password to access encrypted notes</p>
               </div>
             </div>
@@ -73,8 +73,8 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
 
             {/* Password */}
             <div>
-              <label className="text-xs font-medium tracking-widest uppercase text-foreground/40 mb-2 block">
-                Vault Password
+              <label className="label">
+                Vault password
               </label>
               <div className="relative">
                 <input
@@ -104,7 +104,7 @@ export function VaultUnlockModal({ isOpen, onUnlock, error: externalError }: Vau
             <button
               type="submit"
               disabled={!password || unlocking}
-              className="bg-primary text-primary-foreground neubrutal px-6 py-2.5 rounded-card font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors w-full"
+              className="btn-primary w-full"
             >
               {unlocking ? "Unlocking..." : "Unlock"}
             </button>
