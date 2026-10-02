@@ -2,8 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
-import { AtSign, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
+import { Archive, AtSign, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
 import { AutoEmptyTrashControl } from "../../components/AutoEmptyTrashControl";
+import { BackupControl } from "../../components/BackupControl";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
 import { useMyUsername } from "../../hooks/useMyUsername";
@@ -97,6 +98,10 @@ export default function SettingsPage() {
               <CloudUpload size={16} aria-hidden="true" /> Back up or restore keys
             </button>
           </div>
+        </Section>
+
+        <Section id="settings-backup" icon={<Archive size={18} />} title="Back up your notes" description="Download a copy of all your notes in one file.">
+          <BackupControl userId={user.uid} privateKey={privateKey} />
         </Section>
 
         <Section id="settings-trash" icon={<Trash2 size={18} />} title="Trash">
