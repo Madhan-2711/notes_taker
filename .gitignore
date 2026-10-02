@@ -49,3 +49,7 @@ AMAZON_SDE1_INTERN_PREP.md
 .playwright-cli/
 # Personal Claude Code settings
 .claude/settings.local.json
+# End-to-end test session and output
+e2e/.auth/
+e2e/report/
+e2e/results/

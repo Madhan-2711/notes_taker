@@ -271,6 +271,22 @@ npm test
 npm run test:rules
 ```
 
+### 8. Run the end-to-end tests
+
+The Playwright suite drives the real app (desktop and phone sizes) against your Firebase project, so it needs a signed-in session once:
+
+```bash
+npm run e2e:login
+```
+
+A browser opens on `/access`; sign in by hand and the session is saved to `e2e/.auth/user.json` (git-ignored, keep it private). Then:
+
+```bash
+npm run e2e
+```
+
+The dev server starts automatically if it isn't running. Tests only create notes whose titles start with `E2E` and move them to trash when done. Set `E2E_PURGE=1` to also delete those notes and the test groups permanently. `npm run e2e:report` opens the last HTML report.
+
 ---
 
 ## 🗄️ Firestore Collections

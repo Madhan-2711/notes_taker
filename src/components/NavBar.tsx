@@ -36,7 +36,8 @@ function isActive(pathname: string, href: string) {
 function Badge({ count, className = "" }: { count: number; className?: string }) {
   if (count <= 0) return null;
   return (
-    <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold leading-none text-white ${className}`}>
+    // Visual only; the link carries a "(N waiting)" text for screen readers.
+    <span aria-hidden="true" className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold leading-none text-white ${className}`}>
       {count > 9 ? "9+" : count}
     </span>
   );
@@ -121,7 +122,7 @@ export function AppHeader() {
                   <Icon size={16} aria-hidden="true" />
                   {label}
                   {href === "/friends" && <Badge count={pending} />}
-                  {href === "/friends" && pending > 0 && <span className="sr-only">({pending} waiting)</span>}
+                  {href === "/friends" && pending > 0 && <span className="sr-only"> ({pending} waiting)</span>}
                 </Link>
               );
             })}
@@ -178,7 +179,7 @@ export function MobileTabBar() {
         </span>
         {label}
         {href === "/friends" && <Badge count={pending} className="absolute right-[calc(50%-1.4rem)] top-1" />}
-        {href === "/friends" && pending > 0 && <span className="sr-only">({pending} waiting)</span>}
+        {href === "/friends" && pending > 0 && <span className="sr-only"> ({pending} waiting)</span>}
       </Link>
     );
   };
