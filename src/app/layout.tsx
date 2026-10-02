@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppHeader, MobileTabBar } from "../components/NavBar";
+import { CommandPalette } from "../components/CommandPalette";
 import { AuthProvider } from "../contexts/AuthContext";
 import { UserKeysProvider } from "../contexts/UserKeysContext";
 import { NoteDraftProvider } from "../contexts/NoteDraftContext";
@@ -64,6 +65,7 @@ export default function RootLayout({
               {children}
             </main>
             <MobileTabBar />
+            <CommandPalette />
             <ReminderNotifier />
             <UsernamePrompt />
             </ToastProvider>

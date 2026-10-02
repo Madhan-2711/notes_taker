@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
-import { BookOpen, FolderOpen, Home, LogIn, LogOut, Plus, Settings, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, FolderOpen, Home, LogIn, LogOut, Plus, Search, Settings, Users, type LucideIcon } from "lucide-react";
+import { openCommandPalette } from "./CommandPalette";
 import { useAuth } from "../hooks/useAuth";
 import { useInbox } from "../contexts/InboxContext";
 import { auth, googleProvider, hasValidConfig } from "../lib/firebaseConfig";
@@ -87,6 +89,14 @@ function SignInButton() {
 /** Sticky top bar: logo, main navigation and account on desktop; logo and account on phones. */
 export function AppHeader() {
   const { user, loading } = useAuth();
+  const [modKey, setModKey] = useState("Ctrl");
+  // Platform is only known in the browser; render "Ctrl" first to match the server HTML.
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) {
+      const timer = window.setTimeout(() => setModKey("⌘"), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, []);
   const { invites, friendRequests } = useInbox();
   const pathname = usePathname();
   const pending = invites.length + friendRequests.length;
@@ -122,7 +132,14 @@ export function AppHeader() {
             <div className="h-11 w-11 animate-pulse rounded-full bg-slate-200" aria-hidden="true" />
           ) : user ? (
             <>
-              <Link href="/write" className="btn-primary hidden md:inline-flex">
+              <button type="button" onClick={openCommandPalette} aria-keyshortcuts="Control+K Meta+K" className="hidden h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white pl-3 pr-2 text-sm text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900 lg:flex">
+                <Search size={16} aria-hidden="true" /> Search
+                <kbd className="ml-4 rounded-md border border-slate-300 px-1.5 text-xs font-semibold text-slate-600" aria-hidden="true">{modKey} K</kbd>
+              </button>
+              <button type="button" onClick={openCommandPalette} aria-label="Search" className="icon-btn hidden md:inline-flex lg:hidden">
+                <Search size={18} aria-hidden="true" />
+              </button>
+              <Link href="/write" aria-keyshortcuts="N" className="btn-primary hidden md:inline-flex">
                 <Plus size={16} aria-hidden="true" /> New note
               </Link>
               <AccountMenu />
