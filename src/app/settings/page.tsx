@@ -2,9 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Archive, AtSign, Palette, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
+import { Archive, AtSign, FileUp, Palette, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
 import { AutoEmptyTrashControl } from "../../components/AutoEmptyTrashControl";
 import { BackupControl } from "../../components/BackupControl";
+import { ImportNotesControl } from "../../components/ImportNotesControl";
 import { ThemeControl } from "../../components/ThemeControl";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
@@ -107,6 +108,10 @@ export default function SettingsPage() {
 
         <Section id="settings-backup" icon={<Archive size={18} />} title="Back up your notes" description="Download a copy of all your notes in one file.">
           <BackupControl userId={user.uid} privateKey={privateKey} />
+        </Section>
+
+        <Section id="settings-import" icon={<FileUp size={18} />} title="Import notes" description="Bring in notes from a backup, Google Keep, or Markdown and text files.">
+          <ImportNotesControl userId={user.uid} />
         </Section>
 
         <Section id="settings-trash" icon={<Trash2 size={18} />} title="Trash">
