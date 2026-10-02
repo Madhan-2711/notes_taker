@@ -3,7 +3,19 @@
 import { useParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
 import { useUserKeys } from "../../../hooks/useUserKeys";
-import { CollabNoteEditor } from "../../../components/CollabNoteEditor";
+import dynamic from "next/dynamic";
+
+// The live editor (Yjs, Quill, drawing) is the heaviest part of the app; load it as its own chunk.
+const CollabNoteEditor = dynamic(() => import("../../../components/CollabNoteEditor").then((m) => m.CollabNoteEditor), {
+  ssr: false,
+  loading: () => (
+    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8" aria-busy="true" aria-label="Loading shared note">
+      <div className="mb-6 h-9 w-64 animate-pulse rounded-xl bg-slate-200" />
+      <div className="mb-3 h-12 animate-pulse rounded-2xl bg-slate-200" />
+      <div className="h-[60dvh] animate-pulse rounded-card border border-slate-200 bg-white" />
+    </div>
+  ),
+});
 import { CollaboratorManager } from "../../../components/CollaboratorManager";
 import { sendCollabInvite } from "../../../lib/services/social/collaborationService";
 import { decryptKeyFromUser } from "../../../lib/services/crypto/sharing";

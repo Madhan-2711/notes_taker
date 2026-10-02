@@ -13,14 +13,16 @@ import { type Note, type Group } from "../../../lib/validations";
 import { EMPTY_META } from "../../../lib/noteMeta";
 import { subscribeToNotes, updateNormalNote } from "../../../lib/services/notes/normalNotesService";
 import { NoteCard } from "../../../components/NoteCard";
-import { EditNoteModal } from "../../../components/EditNoteModal";
-import { ViewNoteModal } from "../../../components/ViewNoteModal";
+import dynamic from "next/dynamic";
 import { ManageGroupModal } from "../../../components/ManageGroupModal";
 import { PageHeader } from "../../../components/PageHeader";
 import { CardSkeletons, EmptyState, PageLoading, SignInRequired } from "../../../components/PageState";
 import { AnimatePresence } from "framer-motion";
 import { FolderOpen, Settings } from "lucide-react";
 import Link from "next/link";
+
+const EditNoteModal = dynamic(() => import("../../../components/EditNoteModal").then((m) => m.EditNoteModal), { ssr: false });
+const ViewNoteModal = dynamic(() => import("../../../components/ViewNoteModal").then((m) => m.ViewNoteModal), { ssr: false });
 
 export default function GroupDetailPage() {
   const { id: groupId } = useParams<{ id: string }>();
@@ -167,17 +169,17 @@ export default function GroupDetailPage() {
       </div>
 
       {/* Edit Modal */}
-      <EditNoteModal
+      {editingNote && <EditNoteModal
         note={editingNote}
         onClose={() => setEditingNote(null)}
         onSave={handleUpdateNote}
         groups={groups ?? []}
         userId={user.uid}
         privateKey={privateKey}
-      />
+      />}
 
       {/* View Modal */}
-      <ViewNoteModal
+      {viewingNote && <ViewNoteModal
         note={viewingNote}
         groups={groups ?? []}
         onClose={() => setViewingNote(null)}
@@ -187,7 +189,7 @@ export default function GroupDetailPage() {
         pinned={viewingNote ? pinnedIds.has(viewingNote.id) : false}
         onTogglePin={(id) => void togglePin(id)}
         onTrash={viewingNote && viewingNote.authorId === user.uid ? (note) => { setViewingNote(null); void trashNote(note.id); } : undefined}
-      />
+      />}
 
       {/* Manage Group Modal */}
       {currentGroup && (

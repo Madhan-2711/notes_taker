@@ -15,8 +15,7 @@ import {
 } from "../../lib/services/notes/normalNotesService";
 import { addNotesToGroup } from "../../lib/groupsService";
 import { NoteCard } from "../../components/NoteCard";
-import { EditNoteModal } from "../../components/EditNoteModal";
-import { ViewNoteModal } from "../../components/ViewNoteModal";
+import dynamic from "next/dynamic";
 import { PageHeader } from "../../components/PageHeader";
 import { CardSkeletons, EmptyState, PageLoading, SignInRequired } from "../../components/PageState";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
@@ -28,7 +27,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { buildSearchIndex } from "../../lib/noteSearch";
 import { useNotePins } from "../../hooks/useNotePins";
 import { useNoteTitle } from "../../hooks/useNoteTitle";
 import { useNow } from "../../hooks/useNow";
@@ -41,6 +39,10 @@ import { EMPTY_META, normalizeTag } from "../../lib/noteMeta";
 import { NOTE_MODES } from "../../lib/noteModes";
 import { NOTE_SORTS, readViewPreferences, saveViewPreferences, sectionNotes, sortNotes, type NoteLayout, type NoteSort } from "../../lib/noteSort";
 import { TRASH_RETENTION_DAYS, autoEmptyTrashEnabled, deleteNotesForever, expiredTrash } from "../../lib/trash";
+
+// Dialogs (and their editor, attachments and export code) load the first time a note is opened.
+const EditNoteModal = dynamic(() => import("../../components/EditNoteModal").then((m) => m.EditNoteModal), { ssr: false });
+const ViewNoteModal = dynamic(() => import("../../components/ViewNoteModal").then((m) => m.ViewNoteModal), { ssr: false });
 
 type NotesView = "active" | "archived" | "reminders";
 
@@ -225,7 +227,8 @@ function NotesPageContent() {
     let active = true;
     const timer = window.setTimeout(() => {
       setSearching(true);
-      buildSearchIndex(allNotes, user.uid, privateKey).then((index) => {
+      // Search decryption pulls in Yjs; load it only once someone searches.
+      import("../../lib/noteSearch").then(({ buildSearchIndex }) => buildSearchIndex(allNotes, user.uid, privateKey)).then((index) => {
         if (active) setSearchIndex(index);
       }).finally(() => { if (active) setSearching(false); });
     }, 200);
@@ -689,16 +692,16 @@ function NotesPageContent() {
       )}
 
       {/* Edit Modal */}
-      <EditNoteModal
+      {editingNote && <EditNoteModal
         note={editingNote}
         onClose={() => setEditingNote(null)}
         onSave={handleUpdateNote}
         groups={groups}
         userId={user?.uid}
         privateKey={privateKey}
-      />
+      />}
 
-      <ViewNoteModal
+      {activeViewNote && <ViewNoteModal
         note={activeViewNote}
         groups={groups}
         onClose={() => { setViewingNote(null); clearLinkedNote(); }}
@@ -708,7 +711,7 @@ function NotesPageContent() {
         pinned={activeViewNote ? pinnedIds.has(activeViewNote.id) : false}
         onTogglePin={(id) => void togglePin(id)}
         onTrash={activeViewNote && activeViewNote.authorId === user.uid ? (note) => { setViewingNote(null); clearLinkedNote(); void trashNote(note.id); } : undefined}
-      />
+      />}
 
       <ConfirmDialog
         open={confirmDelete !== null}

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { Download, Loader2 } from "lucide-react";
 import { db } from "../lib/firebaseConfig";
-import { backupToJson, backupToMarkdown, buildBackup } from "../lib/backup";
 import { downloadBlob } from "../lib/noteExport";
 import { useNoteMeta } from "../contexts/NoteMetaContext";
 import type { Group, Note } from "../lib/validations";
@@ -38,6 +37,8 @@ export function BackupControl({ userId, privateKey }: { userId: string; privateK
         fetchAllNotes(userId),
         getDocs(query(collection(db, "groups"), where("authorId", "==", userId))),
       ]);
+      // Decrypting shared notes needs Yjs, so the backup code loads on demand.
+      const { backupToJson, backupToMarkdown, buildBackup } = await import("../lib/backup");
       const groups = groupSnap.docs.map((item) => ({ id: item.id, ...item.data() })) as Group[];
       const backup = await buildBackup(notes, userId, privateKey, groups, metaByNote, (done, total) => setProgress(`Preparing ${done} of ${total}…`));
       const now = new Date();
