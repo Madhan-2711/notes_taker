@@ -3,6 +3,8 @@
 // are rendered on the client, so cached HTML holds no personal content.
 const SHELL_CACHE = "notes-shell-v2";
 const STATIC_CACHE = "notes-static-v2";
+// Items shared into the app wait here (on this device only) until the Write page picks them up.
+const SHARE_CACHE = "notes-share-inbox";
 const SHELL_ROUTES = ["/", "/notes", "/write", "/groups", "/friends"];
 
 // Pages reference hashed /_next/static files; cache those too so a page works offline
@@ -40,7 +42,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== SHELL_CACHE && key !== STATIC_CACHE).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key !== SHELL_CACHE && key !== STATIC_CACHE && key !== SHARE_CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -52,10 +54,32 @@ function isCacheableStatic(url) {
     || url.pathname === "/manifest.webmanifest";
 }
 
+/** Stores a share-sheet POST (text, link and files) and opens the Write page to review it. */
+async function receiveShare(request) {
+  const form = await request.formData();
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const cache = await caches.open(SHARE_CACHE);
+  const field = (name) => (typeof form.get(name) === "string" ? form.get(name) : "");
+  const meta = { title: field("title"), text: field("text"), url: field("url"), files: [] };
+  let index = 0;
+  for (const file of form.getAll("files")) {
+    if (typeof file === "string" || index >= 8) continue;
+    const key = `/share-inbox/${id}/file-${index++}`;
+    await cache.put(key, new Response(file, { headers: { "content-type": file.type || "application/octet-stream" } }));
+    meta.files.push({ key, name: file.name || "shared-file", type: file.type || "" });
+  }
+  await cache.put(`/share-inbox/${id}/meta`, new Response(JSON.stringify(meta), { headers: { "content-type": "application/json" } }));
+  return Response.redirect(`/write?shared=${id}`, 303);
+}
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (request.method === "POST" && url.origin === self.location.origin && url.pathname === "/share-target") {
+    event.respondWith(receiveShare(request).catch(() => Response.redirect("/write?shared=failed", 303)));
+    return;
+  }
+  if (request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {

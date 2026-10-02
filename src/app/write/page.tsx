@@ -29,6 +29,8 @@ import { Menu } from "../../components/ui/Menu";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { shareToNote, takeSharedItem } from "../../lib/shareInbox";
+import { Share2, X } from "lucide-react";
 
 export default function WritePage() {
   const router = useRouter();
@@ -108,7 +110,7 @@ export default function WritePage() {
     return () => { active = false; };
   }, [user, noteMode]);
 
-  const addFiles = (selection: FileList | null) => {
+  const addFiles = (selection: FileList | File[] | null) => {
     if (!selection || createdNoteId.current) return;
     try {
       const incoming = Array.from(selection);
@@ -132,6 +134,41 @@ export default function WritePage() {
       prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
     );
   };
+
+  // Items shared from another app arrive as /write?shared=<id> (see public/sw.js).
+  const [shareNotice, setShareNotice] = useState<{ tone: "info" | "warning"; message: string } | null>(null);
+  const shareHandled = useRef(false);
+  useEffect(() => {
+    if (!user || shareHandled.current) return;
+    const shared = new URLSearchParams(window.location.search).get("shared");
+    if (!shared) return;
+    shareHandled.current = true;
+    router.replace("/write", { scroll: false });
+    if (shared === "unavailable" || shared === "failed") {
+      const message = shared === "unavailable"
+        ? "Open Notes Taker from your home screen once, then share again so it can receive text and files."
+        : "That share couldn't be received. Please try sharing again.";
+      window.setTimeout(() => setShareNotice({ tone: "warning", message }), 0);
+      return;
+    }
+    void takeSharedItem(shared).then(async (item) => {
+      if (!item) { setShareNotice({ tone: "warning", message: "That shared item was already added." }); return; }
+      const { title: sharedTitle, text, attachments } = await shareToNote(item);
+      if (text) {
+        const current = parseRichContent(rich) ?? deltaFromPlain(content);
+        const merged = content.trim() ? { ops: [...current.ops, { insert: "\n" }, ...deltaFromPlain(text).ops] } : deltaFromPlain(text);
+        updateDraft({ title: title.trim() ? title : sharedTitle, rich: serializeDelta(merged), content: plainFromDelta(merged) });
+        setEditorVersion((version) => version + 1);
+      } else if (!title.trim() && sharedTitle) {
+        updateDraft({ title: sharedTitle });
+      }
+      if (attachments.length) addFiles(attachments);
+      const fileNote = attachments.length ? ` ${attachments.length} ${attachments.length === 1 ? "file is" : "files are"} ready to attach.` : "";
+      setShareNotice({ tone: "info", message: `Added what you shared.${fileNote} Review it, then save.` });
+    }).catch(() => setShareNotice({ tone: "warning", message: "That share couldn't be read. Please try sharing again." }));
+    // Runs once per visit; the draft values are read at that moment on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleCreateNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,6 +268,14 @@ export default function WritePage() {
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <PageHeader title="New note" />
+
+      {shareNotice && (
+        <div role="status" className={`mb-4 flex items-start gap-3 rounded-xl border p-3 text-sm ${shareNotice.tone === "info" ? "border-indigo-200 bg-indigo-50 text-indigo-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
+          <Share2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">{shareNotice.message}</p>
+          <button type="button" onClick={() => setShareNotice(null)} className="-my-2 -mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-white/60" aria-label="Dismiss"><X size={15} aria-hidden="true" /></button>
+        </div>
+      )}
 
       <form onSubmit={handleCreateNote} className="flex flex-col gap-5">
         <div className="card p-4 sm:p-7">
