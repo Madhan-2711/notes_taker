@@ -2,7 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
-import { AtSign, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert } from "lucide-react";
+import { AtSign, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
+import { AutoEmptyTrashControl } from "../../components/AutoEmptyTrashControl";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
 import { useMyUsername } from "../../hooks/useMyUsername";
@@ -96,6 +97,10 @@ export default function SettingsPage() {
               <CloudUpload size={16} aria-hidden="true" /> Back up or restore keys
             </button>
           </div>
+        </Section>
+
+        <Section id="settings-trash" icon={<Trash2 size={18} />} title="Trash">
+          <AutoEmptyTrashControl />
         </Section>
 
         <Section id="settings-offline" icon={<HardDrive size={18} />} title="Offline storage">

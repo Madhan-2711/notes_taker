@@ -65,6 +65,10 @@
   h1, h2, h3 {
     text-wrap: balance;
   }
+  /* Anchor targets clear the sticky header. */
+  [id] {
+    scroll-margin-top: 5.5rem;
+  }
   /* Tailwind v4 resets buttons to the default arrow cursor; restore the hand so buttons look clickable. */
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
