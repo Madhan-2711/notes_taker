@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
-import { BookOpen, FolderOpen, Home, LogIn, LogOut, Plus, Search, Settings, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, CalendarDays, FolderOpen, Home, LogIn, LogOut, Plus, Search, Settings, Users, type LucideIcon } from "lucide-react";
 import { openCommandPalette } from "./CommandPalette";
 import { useAuth } from "../hooks/useAuth";
 import { useInbox } from "../contexts/InboxContext";
@@ -23,6 +23,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/notes", label: "Notes", icon: BookOpen },
   { href: "/groups", label: "Groups", icon: FolderOpen },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/friends", label: "Friends", icon: Users },
 ];
 
@@ -161,7 +162,9 @@ export function MobileTabBar() {
   const pathname = usePathname();
   if (loading || !user) return null;
   const pending = invites.length + friendRequests.length;
-  const [home, notes, groups, friends] = NAV_LINKS;
+  const byHref = (href: string) => NAV_LINKS.find((link) => link.href === href)!;
+  // Phones keep five slots; Calendar is reached from Home's Today card and the search palette.
+  const [home, notes, groups, friends] = ["/", "/notes", "/groups", "/friends"].map(byHref);
 
   const tab = ({ href, label, icon: Icon }: NavLink) => {
     const active = isActive(pathname, href);

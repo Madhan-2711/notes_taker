@@ -111,7 +111,10 @@ export default function NotesPage() {
 
 function NotesPageContent() {
   const router = useRouter();
-  const linkedNoteId = useSearchParams().get("open");
+  const searchParams = useSearchParams();
+  const linkedNoteId = searchParams.get("open");
+  // "?open=<id>&edit=1" opens straight into the editor (used by Today's note).
+  const linkedForEdit = searchParams.get("edit") === "1";
   const { user, loading } = useAuth();
   const { privateKey } = useUserKeys();
   const { pinnedIds, toggle: togglePin } = useNotePins(user?.uid);
@@ -146,7 +149,8 @@ function NotesPageContent() {
   const linkedNote = linkedNoteId && dismissedLinkedId !== linkedNoteId
     ? allNotes.find((note) => note.id === linkedNoteId && !isCollabNote(note)) ?? null
     : null;
-  const activeViewNote = viewingNote ?? linkedNote;
+  const activeViewNote = viewingNote ?? (linkedForEdit ? null : linkedNote);
+  const activeEditNote = editingNote ?? (linkedForEdit ? linkedNote : null);
 
   const clearLinkedNote = () => {
     if (!linkedNoteId) return;
@@ -692,9 +696,9 @@ function NotesPageContent() {
       )}
 
       {/* Edit Modal */}
-      {editingNote && <EditNoteModal
-        note={editingNote}
-        onClose={() => setEditingNote(null)}
+      {activeEditNote && <EditNoteModal
+        note={activeEditNote}
+        onClose={() => { setEditingNote(null); if (linkedForEdit) clearLinkedNote(); }}
         onSave={handleUpdateNote}
         groups={groups}
         userId={user?.uid}

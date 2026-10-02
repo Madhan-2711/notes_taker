@@ -7,7 +7,11 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
+  Bell,
+  CalendarDays,
   Check,
+  NotebookPen,
+  Repeat,
   CheckCheck,
   Clock3,
   FolderOpen,
@@ -29,6 +33,10 @@ import { useNoteTitle } from "../hooks/useNoteTitle";
 import { useNoteDraft } from "../contexts/NoteDraftContext";
 import { useInbox } from "../contexts/InboxContext";
 import { useNotePins } from "../hooks/useNotePins";
+import { useTodaysNote } from "../hooks/useTodaysNote";
+import { useNoteMeta } from "../contexts/NoteMetaContext";
+import { occurrencesBetween, repeatLabel } from "../lib/noteMeta";
+import { startOfDay } from "../lib/calendar";
 import { NoteModePicker } from "../components/NoteModePicker";
 import { ModeBadge } from "../components/ModeBadge";
 import { db, hasValidConfig } from "../lib/firebaseConfig";
@@ -137,6 +145,66 @@ function InviteRow({ invite, currentTime, canAccept, onAccept, onDecline }: {
       </div>
       {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
     </li>
+  );
+}
+
+function TodayReminder({ note, at, repeat }: { note: Note; at: number; repeat: string }) {
+  const title = useNoteTitle(note);
+  return (
+    <li>
+      <Link href={recentNoteHref(note)} className="flex min-h-11 items-center gap-3 rounded-xl px-2 hover:bg-slate-100">
+        <span className="w-16 shrink-0 text-sm font-semibold tabular-nums text-amber-900">
+          {new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{title}</span>
+        {repeat && <Repeat size={13} className="shrink-0 text-slate-600" aria-label={`Repeats ${repeat.toLowerCase()}`} />}
+      </Link>
+    </li>
+  );
+}
+
+/** Today's date, today's reminders and the daily journal, with a way into the calendar. */
+function TodayCard({ notes, currentTime }: { notes: Note[]; currentTime: number | null }) {
+  const { metaByNote } = useNoteMeta();
+  const { openTodaysNote, busy } = useTodaysNote(notes);
+  const reminders = useMemo(() => {
+    if (currentTime === null) return [];
+    const from = startOfDay(currentTime);
+    const to = from + 86_400_000;
+    const byId = new Map(notes.filter((note) => !note.deletedAt).map((note) => [note.id, note]));
+    const items: { note: Note; at: number; repeat: string }[] = [];
+    metaByNote.forEach((meta, noteId) => {
+      const note = byId.get(noteId);
+      if (!note || meta.reminderAt === null) return;
+      occurrencesBetween(meta.reminderAt, meta.repeat, from, to).forEach((at) => items.push({ note, at, repeat: repeatLabel(meta.repeat) }));
+    });
+    return items.sort((a, b) => a.at - b.at);
+  }, [metaByNote, notes, currentTime]);
+
+  return (
+    <section aria-labelledby="today-title" className="panel p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="today-title" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+          <CalendarDays size={18} aria-hidden="true" /> Today
+        </h2>
+        <Link href="/calendar" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-50">
+          Calendar <ArrowRight size={15} aria-hidden="true" />
+        </Link>
+      </div>
+      <p className="mt-0.5 text-sm text-slate-600">
+        {currentTime === null ? " " : new Date(currentTime).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+      </p>
+      {reminders.length > 0 ? (
+        <ul className="-mx-2 mt-3" aria-label="Today's reminders">
+          {reminders.slice(0, 4).map((item) => <TodayReminder key={`${item.note.id}-${item.at}`} {...item} />)}
+        </ul>
+      ) : (
+        <p className="mt-3 flex items-center gap-2 text-sm text-slate-600"><Bell size={15} aria-hidden="true" /> No reminders today</p>
+      )}
+      <button type="button" onClick={() => void openTodaysNote()} disabled={busy} className="btn-secondary mt-4 w-full">
+        {busy ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <NotebookPen size={16} aria-hidden="true" />} Today&apos;s note
+      </button>
+    </section>
   );
 }
 
@@ -426,6 +494,10 @@ export default function Home() {
 
           {/* On phones, waiting invitations jump above quick capture so they aren't missed. */}
           <div className={`flex flex-col gap-5 lg:order-none lg:col-span-4 ${invites.length + friendRequests.length > 0 ? "order-first" : ""}`}>
+            <motion.div {...enter(0.07)}>
+              <TodayCard notes={allNotes} currentTime={currentTime} />
+            </motion.div>
+
             <motion.section {...enter(0.08)} aria-labelledby="inbox-title" className="panel p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="inbox-title" className="flex items-center gap-2 text-lg font-bold tracking-tight">

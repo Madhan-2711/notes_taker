@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { BookOpen, FolderOpen, Home, Plus, Search, Settings, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, CalendarDays, FolderOpen, Home, Plus, Search, Settings, Users, type LucideIcon } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useNoteTitles } from "../hooks/useNoteTitles";
 import { db, hasValidConfig } from "../lib/firebaseConfig";
@@ -34,6 +34,7 @@ const PAGES: PaletteItem[] = [
   { id: "page:home", label: "Home", hint: "Page", href: "/", icon: Home, section: "Pages" },
   { id: "page:notes", label: "Notes", hint: "Page", href: "/notes", icon: BookOpen, section: "Pages" },
   { id: "page:groups", label: "Groups", hint: "Page", href: "/groups", icon: FolderOpen, section: "Pages" },
+  { id: "page:calendar", label: "Calendar", hint: "Page", href: "/calendar", icon: CalendarDays, section: "Pages" },
   { id: "page:friends", label: "Friends", hint: "Page", href: "/friends", icon: Users, section: "Pages" },
   { id: "page:settings", label: "Settings", hint: "Page", href: "/settings", icon: Settings, section: "Pages" },
 ];
