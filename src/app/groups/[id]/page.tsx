@@ -81,7 +81,7 @@ export default function GroupDetailPage() {
 
   const cardMeta = (noteId: string) => {
     const meta = metaByNote.get(noteId) ?? EMPTY_META;
-    return { tags: meta.tags, reminderAt: meta.reminderAt };
+    return { tags: meta.tags, reminderAt: meta.reminderAt, repeat: meta.repeat };
   };
 
   const handleUpdateNote = async (id: string, title: string, content: string, richContent: string) => {

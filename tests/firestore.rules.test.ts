@@ -468,6 +468,8 @@ describe("rich content and personal note settings", () => {
     await assertFails(setDoc(doc(bob, "users", "alice", "noteMeta", "note-1"), meta));
     await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-3"), { ...meta, secret: "x" }));
     await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-4"), { ...meta, tags: Array.from({ length: 11 }, (_, i) => `t${i}`) }));
+    await assertSucceeds(setDoc(doc(alice, "users", "alice", "noteMeta", "note-5"), { ...meta, repeat: "weekly" }));
+    await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-6"), { ...meta, repeat: "hourly" }));
   });
 });
 

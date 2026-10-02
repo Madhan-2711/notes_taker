@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Archive, ArchiveRestore, Bell, BellOff, Hash, Plus, X } from "lucide-react";
+import { Archive, ArchiveRestore, Bell, BellOff, Hash, Plus, Repeat, X } from "lucide-react";
 import { useNoteMeta } from "../contexts/NoteMetaContext";
 import { useNow } from "../hooks/useNow";
-import { MAX_TAGS, addTag, toLocalInputValue } from "../lib/noteMeta";
+import { MAX_TAGS, REPEAT_OPTIONS, addTag, toLocalInputValue, type ReminderRepeat } from "../lib/noteMeta";
 
 /** Shared busy/error handling for the private organise controls. */
 function useMetaAction() {
@@ -79,20 +79,32 @@ export function NoteTagEditor({ noteId }: { noteId: string }) {
   );
 }
 
-/** Set or clear a reminder for one note. */
+/** Set, repeat or clear a reminder for one note. */
 export function NoteReminderControl({ noteId }: { noteId: string }) {
   const { getMeta, updateMeta } = useNoteMeta();
   const meta = getMeta(noteId);
   const now = useNow();
   const [reminderInput, setReminderInput] = useState("");
+  const [repeatInput, setRepeatInput] = useState<ReminderRepeat | "">("");
   const { error, setError, busy, run } = useMetaAction();
 
-  const setReminder = () => {
-    const at = new Date(reminderInput).getTime();
+  const save = (at: number) => {
     if (!Number.isFinite(at)) { setError("Choose a date and time for the reminder."); return; }
     if (at <= Date.now()) { setError("Choose a time in the future."); return; }
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
-    void run(async () => { await updateMeta(noteId, { reminderAt: at }); setReminderInput(""); });
+    void run(async () => {
+      await updateMeta(noteId, { reminderAt: at, repeat: repeatInput || null });
+      setReminderInput("");
+      setRepeatInput("");
+    });
+  };
+
+  // One-tap preset: tomorrow at 9 AM local time.
+  const tomorrowMorning = () => {
+    const date = new Date(now);
+    date.setDate(date.getDate() + 1);
+    date.setHours(9, 0, 0, 0);
+    return date.getTime();
   };
 
   return (
@@ -100,22 +112,42 @@ export function NoteReminderControl({ noteId }: { noteId: string }) {
       {meta.reminderAt ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold ${meta.reminderAt < now ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
-            <Bell size={16} aria-hidden="true" /> {meta.reminderAt < now ? "Was due" : "Reminds you"} {new Date(meta.reminderAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            {meta.repeat ? <Repeat size={16} aria-hidden="true" /> : <Bell size={16} aria-hidden="true" />}
+            {meta.reminderAt < now ? "Was due" : meta.repeat ? "Next" : "Reminds you"} {new Date(meta.reminderAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
           </span>
+          <label className="sr-only" htmlFor={`repeat-change-${noteId}`}>Repeat</label>
+          <select
+            id={`repeat-change-${noteId}`}
+            value={meta.repeat ?? ""}
+            disabled={busy}
+            onChange={(event) => void run(() => updateMeta(noteId, { repeat: (event.target.value || null) as ReminderRepeat | null }))}
+            className="field w-auto cursor-pointer pr-8"
+          >
+            {REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
           <button type="button" disabled={busy} onClick={() => void run(() => updateMeta(noteId, { reminderAt: null }))} className="btn-secondary">
-            <BellOff size={15} aria-hidden="true" /> Clear reminder
+            <BellOff size={15} aria-hidden="true" /> Clear
           </button>
         </div>
       ) : (
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); setReminder(); }}>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); save(new Date(reminderInput).getTime()); }}>
           <div>
             <label htmlFor={`reminder-${noteId}`} className="label">Remind me on</label>
             <input id={`reminder-${noteId}`} type="datetime-local" value={reminderInput} min={toLocalInputValue(now)} onChange={(event) => setReminderInput(event.target.value)} className="field w-auto" />
           </div>
+          <div>
+            <label htmlFor={`repeat-${noteId}`} className="label">Repeat</label>
+            <select id={`repeat-${noteId}`} value={repeatInput} onChange={(event) => setRepeatInput(event.target.value as ReminderRepeat | "")} className="field w-auto cursor-pointer pr-8">
+              {REPEAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
           <button type="submit" disabled={busy || !reminderInput} className="btn-secondary">Set reminder</button>
+          <button type="button" disabled={busy} onClick={() => save(tomorrowMorning())} className="btn-quiet">Tomorrow, 9 AM</button>
         </form>
       )}
-      <p className="mt-2 text-xs text-slate-600">Reminders alert you while Notes Taker is open in a tab or installed as an app.</p>
+      <p className="mt-2 text-xs text-slate-600">
+        Reminders alert you while Notes Taker is open. Turn on push notifications in Settings to get them when it&apos;s closed.
+      </p>
       {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
     </div>
   );

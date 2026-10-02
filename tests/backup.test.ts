@@ -11,7 +11,7 @@ const regular = { id: "n1", mode: "normal", title: "Groceries", content: "Milk\n
 const privateNote = { id: "n2", mode: "secure", title: "", encryptedTitle: "x", authorId: "me", createdAt: Date.UTC(2026, 0, 1), updatedAt: Date.UTC(2026, 0, 1), groupIds: [] } as unknown as Note;
 const trashed = { ...regular, id: "n3", deletedAt: Date.UTC(2026, 0, 4) } as unknown as Note;
 const groups = [{ id: "g1", title: "Home" }] as Group[];
-const meta = new Map([["n1", { tags: ["shopping"], archived: false, reminderAt: null }]]);
+const meta = new Map([["n1", { tags: ["shopping"], archived: false, reminderAt: null, repeat: null }]]);
 
 describe("buildBackup", () => {
   test("includes regular notes, skips trash, and lists locked encrypted notes without content", async () => {

@@ -298,7 +298,7 @@ function NotesPageContent() {
 
   const cardMeta = (noteId: string) => {
     const meta = metaByNote.get(noteId) ?? EMPTY_META;
-    return { tags: meta.tags, reminderAt: meta.reminderAt };
+    return { tags: meta.tags, reminderAt: meta.reminderAt, repeat: meta.repeat };
   };
 
   if (loading) return <PageLoading label="Loading notes" />;

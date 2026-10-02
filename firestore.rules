@@ -366,11 +366,12 @@ service cloud.firestore {
       match /noteMeta/{noteId} {
         allow read, delete: if signedIn() && request.auth.uid == uid;
         allow create, update: if signedIn() && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(["tags", "archived", "reminderAt", "updatedAt"])
+          && request.resource.data.keys().hasOnly(["tags", "archived", "reminderAt", "repeat", "updatedAt"])
           && request.resource.data.tags is list
           && request.resource.data.tags.size() <= 10
           && request.resource.data.archived is bool
           && (request.resource.data.reminderAt == null || request.resource.data.reminderAt is number)
+          && (!("repeat" in request.resource.data) || request.resource.data.repeat in ["daily", "weekly", "monthly"])
           && request.resource.data.updatedAt is number;
       }
     }

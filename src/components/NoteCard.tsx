@@ -15,7 +15,8 @@ import { noteModeInfo } from "../lib/noteModes";
 import type { NoteLayout } from "../lib/noteSort";
 import { useNow } from "../hooks/useNow";
 import { useNoteTitle } from "../hooks/useNoteTitle";
-import { Trash2, Pencil, Users, Pin, Bell, ExternalLink, Check } from "lucide-react";
+import { Trash2, Pencil, Users, Pin, Bell, ExternalLink, Check, Repeat } from "lucide-react";
+import { repeatLabel, type ReminderRepeat } from "../lib/noteMeta";
 import { useRouter } from "next/navigation";
 
 interface NoteCardProps {
@@ -30,6 +31,7 @@ interface NoteCardProps {
   canDelete?: boolean;
   tags?: string[];
   reminderAt?: number | null;
+  repeat?: ReminderRepeat | null;
   layout?: NoteLayout;
   /** Selection mode: clicking toggles selection instead of opening the note. */
   selecting?: boolean;
@@ -42,7 +44,7 @@ function formatDate(timestamp: number) {
 }
 
 export function NoteCard({
-  note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true, tags = [], reminderAt = null,
+  note, groups = [], onDelete, onEdit, onView, pinned = false, onTogglePin, canDelete = true, tags = [], reminderAt = null, repeat = null,
   layout = "grid", selecting = false, selected = false, onToggleSelect,
 }: NoteCardProps) {
   const router = useRouter();
@@ -109,7 +111,7 @@ export function NoteCard({
     <div className="flex flex-wrap items-center gap-1.5">
       {reminderAt && (
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${reminderAt < now ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
-          <Bell size={12} aria-hidden="true" /> {new Date(reminderAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          {repeat ? <Repeat size={12} aria-label={`Repeats ${repeatLabel(repeat).toLowerCase()}`} /> : <Bell size={12} aria-hidden="true" />} {new Date(reminderAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
         </span>
       )}
       {tags.slice(0, 3).map((tag) => (
