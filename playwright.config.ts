@@ -29,7 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testMatch: /app\.spec\.ts/,
+      testMatch: /(app|capture)\.spec\.ts/,
       // Full Chromium in new headless mode; the lightweight headless shell crashed on the Quill editor.
       use: { ...devices["Desktop Chrome"], channel: "chromium", viewport: { width: 1440, height: 900 }, storageState: AUTH_FILE },
     },

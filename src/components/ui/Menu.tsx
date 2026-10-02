@@ -33,6 +33,8 @@ const MENU_WIDTH = 224;
 export function Menu({ items, label, trigger, triggerClassName = "icon-btn", align = "end", header }: MenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  // Bumped on scroll and resize so the open menu follows its button instead of closing.
+  const [layoutTick, setLayoutTick] = useState(0);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -47,7 +49,7 @@ export function Menu({ items, label, trigger, triggerClassName = "icon-btn", ali
     const left = Math.min(Math.max(8, preferred), window.innerWidth - MENU_WIDTH - 8);
     // Positioning depends on the rendered menu, so it is measured after layout.
     setPosition({ top, left });
-  }, [open, align]);
+  }, [open, align, layoutTick]);
 
   useEffect(() => {
     if (!open) return;
@@ -75,13 +77,14 @@ export function Menu({ items, label, trigger, triggerClassName = "icon-btn", ali
     document.addEventListener("pointerdown", onPointer);
     // Capture so Escape closes the menu before an enclosing dialog sees it.
     document.addEventListener("keydown", onKey, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    const follow = () => setLayoutTick((tick) => tick + 1);
+    window.addEventListener("resize", follow);
+    window.addEventListener("scroll", follow, true);
     return () => {
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", follow);
+      window.removeEventListener("scroll", follow, true);
     };
   }, [open]);
 
