@@ -471,6 +471,17 @@ describe("rich content and personal note settings", () => {
     await assertSucceeds(setDoc(doc(alice, "users", "alice", "noteMeta", "note-5"), { ...meta, repeat: "weekly" }));
     await assertFails(setDoc(doc(alice, "users", "alice", "noteMeta", "note-6"), { ...meta, repeat: "hourly" }));
   });
+
+  test("push notification devices are private to their owner", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const device = { token: "fcm-token", platform: "Android", createdAt: 1, updatedAt: 1 };
+    await assertSucceeds(setDoc(doc(alice, "users", "alice", "pushTokens", "device-1"), device));
+    await assertFails(getDoc(doc(bob, "users", "alice", "pushTokens", "device-1")));
+    await assertFails(setDoc(doc(bob, "users", "alice", "pushTokens", "device-2"), device));
+    await assertFails(setDoc(doc(alice, "users", "alice", "pushTokens", "device-3"), { ...device, extra: true }));
+    await assertFails(setDoc(doc(alice, "users", "alice", "pushTokens", "device-4"), { ...device, token: "" }));
+  });
 });
 
 describe("usernames", () => {

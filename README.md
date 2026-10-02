@@ -271,7 +271,24 @@ npm test
 npm run test:rules
 ```
 
-### 8. Run the end-to-end tests
+### 8. Turn on reminder push notifications (optional)
+
+Reminders always show while the app is open. To deliver them when it's closed, a scheduled Cloud Function (`functions/`) sends web push notifications through Firebase Cloud Messaging:
+
+1. In the Firebase console, open **Project settings → Cloud Messaging → Web Push certificates** and generate a key pair. Add the public key to `.env.local` (and your hosting environment) as `NEXT_PUBLIC_FIREBASE_VAPID_KEY`.
+2. Scheduled functions need the **Blaze** (pay as you go) plan. A run every minute stays well within the free allowance for personal use.
+3. Install the function's dependencies and deploy it together with the rules and the reminder index:
+
+```bash
+cd functions && npm install && cd ..
+firebase deploy --only firestore:rules,firestore:indexes,functions
+```
+
+4. Open the installed app or the live site, go to **Settings → Reminders** and turn on push notifications for each device. On iPhone and iPad this works from the app added to the Home Screen.
+
+Repeating reminders also need the updated `firestore.rules`, so deploy the rules even if you skip push notifications.
+
+### 9. Run the end-to-end tests
 
 The Playwright suite drives the real app (desktop and phone sizes) against your Firebase project, so it needs a signed-in session once:
 

@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run tests/crypto.keys.test.ts tests/drawing.test.ts tests/attachments.test.ts tests/noteNavigation.test.ts tests/inlineImages.test.ts tests/floatingImages.test.ts tests/richText.test.ts tests/richExport.test.ts tests/usernames.test.ts tests/seo.test.ts tests/noteSort.test.ts tests/trash.test.ts tests/backup.test.ts tests/reminders.test.ts tests/calendar.test.ts tests/importNotes.test.ts tests/ocr.test.ts tests/shareInbox.test.ts",
+    "test": "vitest run tests/crypto.keys.test.ts tests/drawing.test.ts tests/attachments.test.ts tests/noteNavigation.test.ts tests/inlineImages.test.ts tests/floatingImages.test.ts tests/richText.test.ts tests/richExport.test.ts tests/usernames.test.ts tests/seo.test.ts tests/noteSort.test.ts tests/trash.test.ts tests/backup.test.ts tests/reminders.test.ts tests/calendar.test.ts tests/importNotes.test.ts tests/ocr.test.ts tests/shareInbox.test.ts tests/pushReminders.test.ts",
     "test:storage": "firebase emulators:exec --project demo-attachments --only firestore,storage \"vitest run tests/storage.rules.test.ts\"",
     "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/firestore.rules.test.ts\"",
     "e2e": "playwright test",

@@ -362,6 +362,21 @@ service cloud.firestore {
         allow delete: if signedIn() && request.auth.uid == uid;
       }
 
+      // Devices that receive reminder push notifications (Firebase Cloud Messaging tokens).
+      // Only the owner can see or change them; the reminder function reads them as admin.
+      match /pushTokens/{tokenId} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(["token", "platform", "createdAt", "updatedAt"])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 4096
+          && request.resource.data.platform is string
+          && request.resource.data.platform.size() <= 100
+          && request.resource.data.createdAt is number
+          && request.resource.data.updatedAt is number;
+      }
+
       // Personal tags, archive flag and reminder for one note.
       match /noteMeta/{noteId} {
         allow read, delete: if signedIn() && request.auth.uid == uid;

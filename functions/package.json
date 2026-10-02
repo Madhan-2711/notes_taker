@@ -1,0 +1,14 @@
+{
+  "name": "notes-taker-functions",
+  "private": true,
+  "description": "Scheduled reminder push notifications for Notes Taker.",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  }
+}

@@ -5,7 +5,7 @@ const SHELL_CACHE = "notes-shell-v2";
 const STATIC_CACHE = "notes-static-v2";
 // Items shared into the app wait here (on this device only) until the Write page picks them up.
 const SHARE_CACHE = "notes-share-inbox";
-const SHELL_ROUTES = ["/", "/notes", "/write", "/groups", "/friends"];
+const SHELL_ROUTES = ["/", "/notes", "/write", "/groups", "/friends", "/calendar", "/settings"];
 
 // Pages reference hashed /_next/static files; cache those too so a page works offline
 // even if it was first loaded before this worker took control.
@@ -108,6 +108,22 @@ self.addEventListener("fetch", (event) => {
       }))
     );
   }
+});
+
+// Reminder pushes from the sendDueReminders Cloud Function (data-only FCM messages).
+// The same tag as in-app reminders means a reminder already shown isn't shown twice.
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
+  const data = payload.data || payload;
+  const title = typeof data.title === "string" ? data.title : "Note reminder";
+  event.waitUntil(self.registration.showNotification(title, {
+    body: typeof data.body === "string" ? data.body : "You have a reminder.",
+    tag: typeof data.tag === "string" ? data.tag : "reminder",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: typeof data.url === "string" ? data.url : "/notes" },
+  }));
 });
 
 self.addEventListener("notificationclick", (event) => {

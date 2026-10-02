@@ -2,10 +2,11 @@
 
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Archive, AtSign, FileUp, Palette, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
+import { Archive, AtSign, BellRing, FileUp, Palette, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
 import { AutoEmptyTrashControl } from "../../components/AutoEmptyTrashControl";
 import { BackupControl } from "../../components/BackupControl";
 import { ImportNotesControl } from "../../components/ImportNotesControl";
+import { PushControl } from "../../components/PushControl";
 import { ThemeControl } from "../../components/ThemeControl";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
@@ -100,6 +101,10 @@ export default function SettingsPage() {
               <CloudUpload size={16} aria-hidden="true" /> Back up or restore keys
             </button>
           </div>
+        </Section>
+
+        <Section id="settings-reminders" icon={<BellRing size={18} />} title="Reminders">
+          <PushControl userId={user.uid} />
         </Section>
 
         <Section id="settings-appearance" icon={<Palette size={18} />} title="Appearance" description="Note text and the shared board stay on a light page in dark mode, so colours you pick stay readable.">
