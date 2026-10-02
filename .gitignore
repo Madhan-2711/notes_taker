@@ -53,3 +53,5 @@ AMAZON_SDE1_INTERN_PREP.md
 e2e/.auth/
 e2e/report/
 e2e/results/
+# Text recognition engine copied from node_modules by scripts/copy-ocr-assets.mjs
+public/ocr/

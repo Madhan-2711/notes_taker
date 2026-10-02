@@ -14,7 +14,8 @@ import { attachmentAccess, uploadAttachment } from "../../lib/services/attachmen
 import { imageToken } from "../../lib/inlineImages";
 import { MAX_PLAIN_TEXT, MAX_RICH_JSON, deltaFromPlain, parseRichContent, plainFromDelta, serializeDelta, type RichOp } from "../../lib/richText";
 import { NOTE_TEMPLATES, type NoteTemplate } from "../../lib/noteTemplates";
-import { RichNoteEditor } from "../../components/RichNoteEditor";
+import { RichNoteEditor, type RichNoteEditorHandle } from "../../components/RichNoteEditor";
+import { ImageToText } from "../../components/ImageToText";
 import { ATTACHMENT_ACCEPT, IMAGE_EXT, MAX_INLINE_PLAINTEXT, validateAttachment } from "../../lib/attachmentCrypto";
 import { getFriends } from "../../lib/services/social/friendsService";
 import { sendCollabInvite } from "../../lib/services/social/collaborationService";
@@ -81,6 +82,7 @@ export default function WritePage() {
   const uploadedImages = useRef<RichOp[]>([]);
   const imageTokensApplied = useRef(false);
   const pickerRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<RichNoteEditorHandle>(null);
 
   // Live-subscribe to user's groups for the multi-select
   useEffect(() => {
@@ -249,13 +251,16 @@ export default function WritePage() {
           <div className="mt-5 [--rich-toolbar-top:4rem]">
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-sm font-semibold text-slate-800" id="write-content-label">Content</p>
+              <div className="flex items-center gap-1">
+              {!savedNoteId && <ImageToText compact onInsert={(text) => editorRef.current?.insertText(text)} />}
               <Menu
                 label="Use a template"
                 align="end"
                 triggerClassName={`btn-quiet min-h-10 px-3 ${locked ? "pointer-events-none opacity-50" : ""}`}
-                trigger={<><FileText size={16} aria-hidden="true" /> Use template</>}
+                trigger={<><FileText size={16} aria-hidden="true" /><span className="hidden sm:inline">Use template</span></>}
                 items={NOTE_TEMPLATES.map((template) => ({ label: template.label, onSelect: () => chooseTemplate(template) }))}
               />
+              </div>
             </div>
             <RichNoteEditor
               key={`${user.uid}:${editorVersion}`}
@@ -263,6 +268,7 @@ export default function WritePage() {
               readOnly={Boolean(savedNoteId)}
               label="Note content"
               placeholder="Start writing your thoughts…"
+              handleRef={editorRef}
               onChange={(delta, plain) => updateDraft({ rich: serializeDelta(delta), content: plain })}
             />
             <p className={`mt-1 text-right text-xs tabular-nums ${content.length > MAX_PLAIN_TEXT ? "font-semibold text-red-700" : "text-slate-600"}`}>{content.length.toLocaleString()} / {MAX_PLAIN_TEXT.toLocaleString()} characters</p>

@@ -15,6 +15,7 @@ import { Dialog, useDialogTitleId } from "./ui/Dialog";
 import { X, Check, FolderOpen, ImagePlus, Lock, Users, Loader2 } from "lucide-react";
 import { setNoteGroupIds } from "../lib/groupsService";
 import { NoteAttachments } from "./NoteAttachments";
+import { ImageToText } from "./ImageToText";
 import type { Attachment } from "../lib/services/attachments";
 import { RichNoteEditor, type RichNoteEditorHandle } from "./RichNoteEditor";
 import { MAX_PLAIN_TEXT, MAX_RICH_JSON, deltaFromPlain, parseRichContent, serializeDelta, type RichDelta } from "../lib/richText";
@@ -164,6 +165,7 @@ export function EditNoteModal({
                     <ImagePlus size={17} aria-hidden="true" /> <span className="hidden sm:inline">Add image or file</span>
                   </button>
                 )}
+                {isEditable && !decrypting && <ImageToText compact triggerClassName="btn-secondary min-h-10 px-3" onInsert={(text) => editorRef.current?.insertText(text)} />}
                 <button type="button" onClick={onClose} className="icon-btn" aria-label="Close editor">
                   <X size={20} aria-hidden="true" />
                 </button>

@@ -6,7 +6,8 @@ const ContentSecurityPolicy = [
   "default-src 'self'",
 
   // Keep unsafe-eval development-only, as required by the Next.js dev runtime.
-  `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""} https://accounts.google.com https://apis.google.com https://www.gstatic.com`,
+  // 'wasm-unsafe-eval' lets the on-device text recognition engine (WebAssembly) start.
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDevelopment ? " 'unsafe-eval'" : ""} https://accounts.google.com https://apis.google.com https://www.gstatic.com`,
 
   // Tailwind CSS uses inline styles
   "style-src 'self' 'unsafe-inline'",
