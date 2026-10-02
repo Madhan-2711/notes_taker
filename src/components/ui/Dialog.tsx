@@ -92,7 +92,7 @@ export function Dialog({ open, onClose, labelledBy, label, children, size = "md"
           transition={{ duration: reduceMotion ? 0 : 0.15 }}
           className={`fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center ${sheetOnMobile ? "p-0 sm:p-6" : "p-4 sm:p-6"}`}
         >
-          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
           <motion.div
             ref={panelRef}
             data-dialog-panel

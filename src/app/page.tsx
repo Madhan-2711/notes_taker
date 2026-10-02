@@ -82,7 +82,7 @@ function RecentNoteCard({ note, currentTime }: { note: Note; currentTime: number
   return (
     <Link
       href={recentNoteHref(note)}
-      className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-slate-900 hover:shadow-[3px_3px_0_0_#0f172a]"
+      className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-slate-900 hover:shadow-[3px_3px_0_0_var(--color-slate-900)]"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <ModeBadge mode={note.mode || "normal"} />

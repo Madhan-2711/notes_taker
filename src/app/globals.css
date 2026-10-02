@@ -34,8 +34,8 @@
     --accent-foreground: #ffffff;
     --border: #e2e8f0;
     --muted-foreground: #475569;
-    --neubrutalism-shadow: 4px 4px 0px 0px #0f172a;
-    --neubrutalism-shadow-hover: 6px 6px 0px 0px #0f172a;
+    --neubrutalism-shadow: 4px 4px 0px 0px var(--color-slate-900);
+    --neubrutalism-shadow-hover: 6px 6px 0px 0px var(--color-slate-900);
     /* Shared z-index scale for the app shell and overlays. */
     --z-header: 40;
     --z-tabbar: 40;
@@ -86,7 +86,7 @@
   @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0;
 }
 @utility btn-primary {
-  @apply btn border-2 border-slate-900 bg-primary-strong font-bold text-white shadow-[3px_3px_0_0_#0f172a] hover:bg-primary hover:shadow-[4px_4px_0_0_#0f172a] disabled:hover:bg-primary-strong disabled:hover:shadow-[3px_3px_0_0_#0f172a];
+  @apply btn border-2 border-slate-900 bg-primary-strong font-bold text-white shadow-[3px_3px_0_0_var(--color-slate-900)] hover:bg-primary hover:shadow-[4px_4px_0_0_var(--color-slate-900)] disabled:hover:bg-primary-strong disabled:hover:shadow-[3px_3px_0_0_var(--color-slate-900)];
 }
 @utility btn-secondary {
   @apply btn border border-slate-300 bg-white text-slate-800 hover:border-primary hover:text-primary-strong;
@@ -155,6 +155,386 @@
     .pb-tabbar {
       padding-bottom: 0;
     }
+  }
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────────────
+   The palette is redefined on <body> (not :root), so :root still holds the light
+   values in --l-* and "paper" areas (note text, the shared board, editor toolbars)
+   can switch back to light. That keeps text colours chosen in the editor readable. */
+:root {
+  --l-white: var(--color-white);
+  --l-slate-50: var(--color-slate-50);
+  --l-slate-100: var(--color-slate-100);
+  --l-slate-200: var(--color-slate-200);
+  --l-slate-300: var(--color-slate-300);
+  --l-slate-400: var(--color-slate-400);
+  --l-slate-500: var(--color-slate-500);
+  --l-slate-600: var(--color-slate-600);
+  --l-slate-700: var(--color-slate-700);
+  --l-slate-800: var(--color-slate-800);
+  --l-slate-900: var(--color-slate-900);
+  --l-slate-950: var(--color-slate-950);
+  --l-indigo-50: var(--color-indigo-50);
+  --l-indigo-100: var(--color-indigo-100);
+  --l-indigo-200: var(--color-indigo-200);
+  --l-indigo-300: var(--color-indigo-300);
+  --l-indigo-400: var(--color-indigo-400);
+  --l-indigo-500: var(--color-indigo-500);
+  --l-indigo-600: var(--color-indigo-600);
+  --l-indigo-700: var(--color-indigo-700);
+  --l-indigo-800: var(--color-indigo-800);
+  --l-indigo-900: var(--color-indigo-900);
+  --l-emerald-50: var(--color-emerald-50);
+  --l-emerald-100: var(--color-emerald-100);
+  --l-emerald-200: var(--color-emerald-200);
+  --l-emerald-300: var(--color-emerald-300);
+  --l-emerald-400: var(--color-emerald-400);
+  --l-emerald-500: var(--color-emerald-500);
+  --l-emerald-600: var(--color-emerald-600);
+  --l-emerald-700: var(--color-emerald-700);
+  --l-emerald-800: var(--color-emerald-800);
+  --l-emerald-900: var(--color-emerald-900);
+  --l-amber-50: var(--color-amber-50);
+  --l-amber-100: var(--color-amber-100);
+  --l-amber-200: var(--color-amber-200);
+  --l-amber-300: var(--color-amber-300);
+  --l-amber-600: var(--color-amber-600);
+  --l-amber-700: var(--color-amber-700);
+  --l-amber-900: var(--color-amber-900);
+  --l-red-50: var(--color-red-50);
+  --l-red-100: var(--color-red-100);
+  --l-red-200: var(--color-red-200);
+  --l-red-300: var(--color-red-300);
+  --l-red-500: var(--color-red-500);
+  --l-red-600: var(--color-red-600);
+  --l-red-700: var(--color-red-700);
+  --l-red-800: var(--color-red-800);
+  --l-red-900: var(--color-red-900);
+  --l-rose-600: var(--color-rose-600);
+  --l-primary: var(--color-primary);
+  --l-primary-strong: var(--color-primary-strong);
+  --l-background: var(--color-background);
+  --l-foreground: var(--color-foreground);
+  --l-card: var(--color-card);
+  --l-border: var(--color-border);
+  --l-muted: var(--color-muted);
+  --l-muted-foreground: var(--color-muted-foreground);
+  --l-legacy--background: var(--background);
+  --l-legacy--foreground: var(--foreground);
+  --l-legacy--card: var(--card);
+  --l-legacy--card-foreground: var(--card-foreground);
+  --l-legacy--border: var(--border);
+  --l-legacy--muted-foreground: var(--muted-foreground);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="dark"] body {
+    --color-white: #0f1626;
+    --color-slate-50: #131b2c;
+    --color-slate-100: #1a2336;
+    --color-slate-200: #263248;
+    --color-slate-300: #36435c;
+    --color-slate-400: #55637d;
+    --color-slate-500: #8a98ae;
+    --color-slate-600: #a7b2c4;
+    --color-slate-700: #c3ccda;
+    --color-slate-800: #dbe2ec;
+    --color-slate-900: #edf1f7;
+    --color-slate-950: #f7f9fc;
+    --color-indigo-50: #1c1e40;
+    --color-indigo-100: #24275a;
+    --color-indigo-200: #30357f;
+    --color-indigo-300: #434ba8;
+    --color-indigo-400: #5c64d6;
+    --color-indigo-500: #7c83f0;
+    --color-indigo-600: #9aa0f6;
+    --color-indigo-700: #b1b6fa;
+    --color-indigo-800: #cbcffc;
+    --color-indigo-900: #e3e5fe;
+    --color-emerald-50: #0f2a22;
+    --color-emerald-100: #123a2e;
+    --color-emerald-200: #185040;
+    --color-emerald-300: #1f6b53;
+    --color-emerald-400: #2fae7f;
+    --color-emerald-500: #34d399;
+    --color-emerald-600: #5fe0ad;
+    --color-emerald-700: #86e9c2;
+    --color-emerald-800: #a7f0d3;
+    --color-emerald-900: #cdf7e6;
+    --color-amber-50: #2b2110;
+    --color-amber-100: #3a2c12;
+    --color-amber-200: #5a4316;
+    --color-amber-300: #7a5a1a;
+    --color-amber-600: #f7c25f;
+    --color-amber-700: #f9cf7f;
+    --color-amber-900: #fde9c4;
+    --color-red-50: #2f1416;
+    --color-red-100: #3d191c;
+    --color-red-200: #5c2227;
+    --color-red-300: #7f2d33;
+    --color-red-500: #f87171;
+    --color-red-600: #f99393;
+    --color-red-700: #fbadad;
+    --color-red-800: #fcc7c7;
+    --color-red-900: #fde0e0;
+    --color-rose-600: #fb7185;
+    --color-primary: #c3c7fb;
+    --color-primary-strong: #a9aefa;
+    --color-background: #0a0f1c;
+    --color-foreground: #edf1f7;
+    --color-card: #0f1626;
+    --color-border: #263248;
+    --color-muted: #1a2336;
+    --color-muted-foreground: #a7b2c4;
+    --background: #0a0f1c;
+    --foreground: #edf1f7;
+    --card: #0f1626;
+    --card-foreground: #edf1f7;
+    --border: #263248;
+    --muted-foreground: #a7b2c4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+  :root:not([data-theme="light"]) body {
+    --color-white: #0f1626;
+    --color-slate-50: #131b2c;
+    --color-slate-100: #1a2336;
+    --color-slate-200: #263248;
+    --color-slate-300: #36435c;
+    --color-slate-400: #55637d;
+    --color-slate-500: #8a98ae;
+    --color-slate-600: #a7b2c4;
+    --color-slate-700: #c3ccda;
+    --color-slate-800: #dbe2ec;
+    --color-slate-900: #edf1f7;
+    --color-slate-950: #f7f9fc;
+    --color-indigo-50: #1c1e40;
+    --color-indigo-100: #24275a;
+    --color-indigo-200: #30357f;
+    --color-indigo-300: #434ba8;
+    --color-indigo-400: #5c64d6;
+    --color-indigo-500: #7c83f0;
+    --color-indigo-600: #9aa0f6;
+    --color-indigo-700: #b1b6fa;
+    --color-indigo-800: #cbcffc;
+    --color-indigo-900: #e3e5fe;
+    --color-emerald-50: #0f2a22;
+    --color-emerald-100: #123a2e;
+    --color-emerald-200: #185040;
+    --color-emerald-300: #1f6b53;
+    --color-emerald-400: #2fae7f;
+    --color-emerald-500: #34d399;
+    --color-emerald-600: #5fe0ad;
+    --color-emerald-700: #86e9c2;
+    --color-emerald-800: #a7f0d3;
+    --color-emerald-900: #cdf7e6;
+    --color-amber-50: #2b2110;
+    --color-amber-100: #3a2c12;
+    --color-amber-200: #5a4316;
+    --color-amber-300: #7a5a1a;
+    --color-amber-600: #f7c25f;
+    --color-amber-700: #f9cf7f;
+    --color-amber-900: #fde9c4;
+    --color-red-50: #2f1416;
+    --color-red-100: #3d191c;
+    --color-red-200: #5c2227;
+    --color-red-300: #7f2d33;
+    --color-red-500: #f87171;
+    --color-red-600: #f99393;
+    --color-red-700: #fbadad;
+    --color-red-800: #fcc7c7;
+    --color-red-900: #fde0e0;
+    --color-rose-600: #fb7185;
+    --color-primary: #c3c7fb;
+    --color-primary-strong: #a9aefa;
+    --color-background: #0a0f1c;
+    --color-foreground: #edf1f7;
+    --color-card: #0f1626;
+    --color-border: #263248;
+    --color-muted: #1a2336;
+    --color-muted-foreground: #a7b2c4;
+    --background: #0a0f1c;
+    --foreground: #edf1f7;
+    --card: #0f1626;
+    --card-foreground: #edf1f7;
+    --border: #263248;
+    --muted-foreground: #a7b2c4;
+  }
+}
+
+:root[data-theme="dark"] .paper,
+:root[data-theme="dark"] .rich-note,
+:root[data-theme="dark"] .collab-toolbar {
+  color-scheme: light;
+    --color-white: var(--l-white);
+    --color-slate-50: var(--l-slate-50);
+    --color-slate-100: var(--l-slate-100);
+    --color-slate-200: var(--l-slate-200);
+    --color-slate-300: var(--l-slate-300);
+    --color-slate-400: var(--l-slate-400);
+    --color-slate-500: var(--l-slate-500);
+    --color-slate-600: var(--l-slate-600);
+    --color-slate-700: var(--l-slate-700);
+    --color-slate-800: var(--l-slate-800);
+    --color-slate-900: var(--l-slate-900);
+    --color-slate-950: var(--l-slate-950);
+    --color-indigo-50: var(--l-indigo-50);
+    --color-indigo-100: var(--l-indigo-100);
+    --color-indigo-200: var(--l-indigo-200);
+    --color-indigo-300: var(--l-indigo-300);
+    --color-indigo-400: var(--l-indigo-400);
+    --color-indigo-500: var(--l-indigo-500);
+    --color-indigo-600: var(--l-indigo-600);
+    --color-indigo-700: var(--l-indigo-700);
+    --color-indigo-800: var(--l-indigo-800);
+    --color-indigo-900: var(--l-indigo-900);
+    --color-emerald-50: var(--l-emerald-50);
+    --color-emerald-100: var(--l-emerald-100);
+    --color-emerald-200: var(--l-emerald-200);
+    --color-emerald-300: var(--l-emerald-300);
+    --color-emerald-400: var(--l-emerald-400);
+    --color-emerald-500: var(--l-emerald-500);
+    --color-emerald-600: var(--l-emerald-600);
+    --color-emerald-700: var(--l-emerald-700);
+    --color-emerald-800: var(--l-emerald-800);
+    --color-emerald-900: var(--l-emerald-900);
+    --color-amber-50: var(--l-amber-50);
+    --color-amber-100: var(--l-amber-100);
+    --color-amber-200: var(--l-amber-200);
+    --color-amber-300: var(--l-amber-300);
+    --color-amber-600: var(--l-amber-600);
+    --color-amber-700: var(--l-amber-700);
+    --color-amber-900: var(--l-amber-900);
+    --color-red-50: var(--l-red-50);
+    --color-red-100: var(--l-red-100);
+    --color-red-200: var(--l-red-200);
+    --color-red-300: var(--l-red-300);
+    --color-red-500: var(--l-red-500);
+    --color-red-600: var(--l-red-600);
+    --color-red-700: var(--l-red-700);
+    --color-red-800: var(--l-red-800);
+    --color-red-900: var(--l-red-900);
+    --color-rose-600: var(--l-rose-600);
+    --color-primary: var(--l-primary);
+    --color-primary-strong: var(--l-primary-strong);
+    --color-background: var(--l-background);
+    --color-foreground: var(--l-foreground);
+    --color-card: var(--l-card);
+    --color-border: var(--l-border);
+    --color-muted: var(--l-muted);
+    --color-muted-foreground: var(--l-muted-foreground);
+    --background: var(--l-legacy--background);
+    --foreground: var(--l-legacy--foreground);
+    --card: var(--l-legacy--card);
+    --card-foreground: var(--l-legacy--card-foreground);
+    --border: var(--l-legacy--border);
+    --muted-foreground: var(--l-legacy--muted-foreground);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .paper,
+  :root:not([data-theme="light"]) .rich-note,
+  :root:not([data-theme="light"]) .collab-toolbar {
+    color-scheme: light;
+    --color-white: var(--l-white);
+    --color-slate-50: var(--l-slate-50);
+    --color-slate-100: var(--l-slate-100);
+    --color-slate-200: var(--l-slate-200);
+    --color-slate-300: var(--l-slate-300);
+    --color-slate-400: var(--l-slate-400);
+    --color-slate-500: var(--l-slate-500);
+    --color-slate-600: var(--l-slate-600);
+    --color-slate-700: var(--l-slate-700);
+    --color-slate-800: var(--l-slate-800);
+    --color-slate-900: var(--l-slate-900);
+    --color-slate-950: var(--l-slate-950);
+    --color-indigo-50: var(--l-indigo-50);
+    --color-indigo-100: var(--l-indigo-100);
+    --color-indigo-200: var(--l-indigo-200);
+    --color-indigo-300: var(--l-indigo-300);
+    --color-indigo-400: var(--l-indigo-400);
+    --color-indigo-500: var(--l-indigo-500);
+    --color-indigo-600: var(--l-indigo-600);
+    --color-indigo-700: var(--l-indigo-700);
+    --color-indigo-800: var(--l-indigo-800);
+    --color-indigo-900: var(--l-indigo-900);
+    --color-emerald-50: var(--l-emerald-50);
+    --color-emerald-100: var(--l-emerald-100);
+    --color-emerald-200: var(--l-emerald-200);
+    --color-emerald-300: var(--l-emerald-300);
+    --color-emerald-400: var(--l-emerald-400);
+    --color-emerald-500: var(--l-emerald-500);
+    --color-emerald-600: var(--l-emerald-600);
+    --color-emerald-700: var(--l-emerald-700);
+    --color-emerald-800: var(--l-emerald-800);
+    --color-emerald-900: var(--l-emerald-900);
+    --color-amber-50: var(--l-amber-50);
+    --color-amber-100: var(--l-amber-100);
+    --color-amber-200: var(--l-amber-200);
+    --color-amber-300: var(--l-amber-300);
+    --color-amber-600: var(--l-amber-600);
+    --color-amber-700: var(--l-amber-700);
+    --color-amber-900: var(--l-amber-900);
+    --color-red-50: var(--l-red-50);
+    --color-red-100: var(--l-red-100);
+    --color-red-200: var(--l-red-200);
+    --color-red-300: var(--l-red-300);
+    --color-red-500: var(--l-red-500);
+    --color-red-600: var(--l-red-600);
+    --color-red-700: var(--l-red-700);
+    --color-red-800: var(--l-red-800);
+    --color-red-900: var(--l-red-900);
+    --color-rose-600: var(--l-rose-600);
+    --color-primary: var(--l-primary);
+    --color-primary-strong: var(--l-primary-strong);
+    --color-background: var(--l-background);
+    --color-foreground: var(--l-foreground);
+    --color-card: var(--l-card);
+    --color-border: var(--l-border);
+    --color-muted: var(--l-muted);
+    --color-muted-foreground: var(--l-muted-foreground);
+    --background: var(--l-legacy--background);
+    --foreground: var(--l-legacy--foreground);
+    --card: var(--l-legacy--card);
+    --card-foreground: var(--l-legacy--card-foreground);
+    --border: var(--l-legacy--border);
+    --muted-foreground: var(--l-legacy--muted-foreground);
+  }
+}
+
+/* Paper areas also need light text and an opaque page; colour is inherited, not a variable. */
+:root[data-theme="dark"] :is(.paper, .rich-note, .collab-toolbar) {
+  color: #0f172a;
+}
+:root[data-theme="dark"] .rich-note-edit {
+  background: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) :is(.paper, .rich-note, .collab-toolbar) {
+    color: #0f172a;
+  }
+  :root:not([data-theme="light"]) .rich-note-edit {
+    background: #fff;
+  }
+}
+
+/* Read-only note text sits on its own light sheet in dark mode. */
+:root[data-theme="dark"] .rich-note-view {
+  padding: 20px;
+  border-radius: 14px;
+  background: #fff;
+  color: #0f172a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rich-note-view {
+    padding: 20px;
+    border-radius: 14px;
+    background: #fff;
+    color: #0f172a;
   }
 }
 

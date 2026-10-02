@@ -2,9 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Archive, AtSign, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
+import { Archive, AtSign, Palette, CloudUpload, Download, HardDrive, KeyRound, LogOut, ShieldAlert, Trash2 } from "lucide-react";
 import { AutoEmptyTrashControl } from "../../components/AutoEmptyTrashControl";
 import { BackupControl } from "../../components/BackupControl";
+import { ThemeControl } from "../../components/ThemeControl";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserKeys } from "../../hooks/useUserKeys";
 import { useMyUsername } from "../../hooks/useMyUsername";
@@ -98,6 +99,10 @@ export default function SettingsPage() {
               <CloudUpload size={16} aria-hidden="true" /> Back up or restore keys
             </button>
           </div>
+        </Section>
+
+        <Section id="settings-appearance" icon={<Palette size={18} />} title="Appearance" description="Note text and the shared board stay on a light page in dark mode, so colours you pick stay readable.">
+          <ThemeControl />
         </Section>
 
         <Section id="settings-backup" icon={<Archive size={18} />} title="Back up your notes" description="Download a copy of all your notes in one file.">

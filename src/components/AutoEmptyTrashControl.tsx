@@ -32,9 +32,12 @@ export function AutoEmptyTrashControl() {
         aria-labelledby="auto-empty-label"
         aria-describedby="auto-empty-help"
         onClick={toggle}
-        className={`relative mt-0.5 inline-flex h-8 w-14 shrink-0 items-center rounded-full border-2 border-slate-900 transition-colors ${enabled ? "bg-primary-strong" : "bg-slate-200"}`}
+        className="-my-1.5 flex h-11 w-16 shrink-0 items-center justify-center rounded-full"
       >
-        <span className={`inline-block h-6 w-6 rounded-full border-2 border-slate-900 bg-white transition-transform ${enabled ? "translate-x-6" : "translate-x-0.5"}`} aria-hidden="true" />
+        {/* The 44px button is the hit area; the visible track sits inside it. */}
+        <span className={`flex h-8 w-14 items-center rounded-full border-2 border-slate-900 transition-colors ${enabled ? "bg-primary-strong" : "bg-slate-200"}`} aria-hidden="true">
+          <span className={`inline-block h-6 w-6 rounded-full border-2 border-slate-900 bg-white transition-transform ${enabled ? "translate-x-6" : "translate-x-0.5"}`} />
+        </span>
       </button>
     </div>
   );

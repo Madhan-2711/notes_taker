@@ -13,6 +13,7 @@ import { InboxProvider } from "../contexts/InboxContext";
 import { ToastProvider } from "../contexts/ToastContext";
 import { UsernamePrompt } from "../components/UsernamePrompt";
 import { isIndexableDeployment, productionSiteUrl } from "../lib/seo";
+import { THEME_BOOT_SCRIPT } from "../lib/theme";
 
 const geist = Geist({ subsets: ["latin"], display: "swap", variable: "--font-geist" });
 const geistMono = Geist_Mono({ subsets: ["latin"], display: "swap", variable: "--font-geist-mono" });
@@ -39,7 +40,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1626" },
+  ],
 };
 
 export default function RootLayout({
@@ -49,6 +53,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} font-sans`} suppressHydrationWarning>
+      <head>
+        {/* Applies a saved light/dark choice before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="flex min-h-dvh flex-col" suppressHydrationWarning>
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[var(--z-prompt)] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:shadow-[var(--neubrutalism-shadow)]">
           Skip to content

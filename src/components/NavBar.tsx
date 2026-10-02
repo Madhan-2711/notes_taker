@@ -195,7 +195,7 @@ export function MobileTabBar() {
           href="/write"
           aria-label="New note"
           aria-current={pathname === "/write" ? "page" : undefined}
-          className="mx-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-slate-900 bg-primary-strong text-white shadow-[3px_3px_0_0_#0f172a] active:translate-y-px"
+          className="mx-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-slate-900 bg-primary-strong text-white shadow-[3px_3px_0_0_var(--color-slate-900)] active:translate-y-px"
         >
           <Plus size={22} aria-hidden="true" />
         </Link>
